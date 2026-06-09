@@ -1,71 +1,143 @@
-# dv-choice-editor README
+# DV Choice Editor
 
-This is the README for your extension "dv-choice-editor". After writing up a brief description, we recommend including the following sections.
+Dataverse choice management inside VS Code.
 
-## Features
+**DV Choice Editor** is a focused utility from **DV ForgeLab** for managing Dataverse local choice (option set) values directly from VS Code.
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+The extension provides a lightweight, preview-first workflow for creating, updating, deleting, reviewing, and publishing Dataverse choice values without leaving the development workspace.
 
-For example if there is an image subfolder under your extension project workspace:
+## Screenshot
 
-\!\[feature X\]\(images/feature-x.png\)
+![DV Choice Editor](docs/dvce-page.png)
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+### Highlights
 
-## Requirements
-
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
-
-## Extension Settings
-
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
-For example:
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
-
-## Known Issues
-
-Calling out known issues can help limit users opening duplicate issues against your extension.
-
-## Release Notes
-
-Users appreciate release notes as you update your extension.
-
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
+- Preview-first metadata updates
+- Environment-aware publishing (DEV / TEST / PROD)
+- Staged changes before publish
+- Add, update, and delete choice values
+- Safety guardrails for production environments
+- Built for Dataverse developers working inside VS Code
 
 ---
 
-## Following extension guidelines
+## Features
 
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
+### Manage Dataverse Choice Values
 
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
+- Browse entity-scoped choice columns
+- View existing choice values
+- Create new choice values
+- Update choice labels
+- Delete choice values
+- Preview metadata changes before publishing
 
-## Working with Markdown
+### Preview-First Workflow
 
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
+All metadata changes are staged locally before being applied.
 
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
+```text
+Select entity
+↓
+Select choice column
+↓
+Stage changes
+↓
+Review preview
+↓
+Apply and publish
+```
 
-## For more information
+### Environment Awareness
 
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
+DV Choice Editor detects the connected environment and provides visual indicators:
 
-**Enjoy!**
+* DEV
+* TEST
+* PROD
+
+Production-class environments display elevated publish warnings before metadata changes are applied.
+
+### Safety Features
+
+* Preview-first mutation workflow
+* Local staging before publish
+* Remove individual staged changes
+* Clear all staged changes
+* Prevent deletion of the final remaining choice value
+* Boolean columns automatically excluded
+* Choice values treated as immutable identities after creation
+
+---
+
+## Commands
+
+### Open Choice Editor
+
+```text
+DV Choice Editor: Open Choice Editor
+```
+
+---
+
+## Scope
+
+DV Choice Editor intentionally focuses on a single operational task:
+
+**Managing Dataverse local choice values.**
+
+The extension does not currently provide:
+
+* Global choice management
+* CSV import/export
+* Solution management
+* Metadata administration beyond choice values
+* Bulk editing workflows
+
+---
+
+## Why DV Choice Editor?
+
+Many Dataverse customization tasks still require switching between browser-based administration experiences and development tooling.
+
+DV Choice Editor brings a focused choice management workflow directly into VS Code while preserving explicit review and publish steps.
+
+---
+
+## Part of the DV ForgeLab Family
+
+DV Choice Editor is a focused Dataverse utility from DV ForgeLab.
+
+For operational investigation, execution, runtime analysis, and cross-environment comparison, see DV Quick Run.
+
+DV Choice Editor follows the same principles:
+
+* Preview-first
+* Environment-aware
+* Metadata-backed
+* Explicit execution
+* Calm operational UX
+
+---
+
+## Version
+
+### v1.0.0
+
+Initial public release.
+
+Features included:
+
+* Entity-scoped choice discovery
+* Choice value browsing
+* Add value workflow
+* Edit label workflow
+* Delete value workflow
+* Preview changes
+* Environment-aware publishing
+* Staged change management
+* Production safety indicators
+
+---
+
+Built by **DV ForgeLab**.

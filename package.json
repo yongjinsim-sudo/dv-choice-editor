@@ -1,23 +1,57 @@
 {
   "name": "dv-choice-editor",
   "displayName": "DV Choice Editor",
-  "description": "Dataverse choice and option set management for VS Code.",
-  "version": "0.0.1",
+  "description": "Preview-first Dataverse choice and option set management for VS Code.",
+  "version": "1.0.0",
   "engines": {
     "vscode": "^1.120.0"
   },
   "categories": [
-    "Other"
+    "Other",
+    "Data Science"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onCommand:dvChoiceEditor.openChoiceEditor"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "dv-choice-editor.helloWorld",
-        "title": "Hello World"
+        "command": "dvChoiceEditor.openChoiceEditor",
+        "title": "DV Choice Editor: Open Choice Editor"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "DV Choice Editor",
+      "properties": {
+        "dvChoiceEditor.environments": {
+          "type": "array",
+          "default": [],
+          "description": "Dataverse environments available to DV Choice Editor.",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "url"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Environment label, for example DEV or SIT."
+              },
+              "url": {
+                "type": "string",
+                "description": "Dataverse environment URL, for example https://org.crm6.dynamics.com."
+              },
+              "tenantId": {
+                "type": "string",
+                "description": "Optional tenant ID for Azure CLI token acquisition."
+              }
+            }
+          }
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
@@ -36,5 +70,32 @@
     "typescript": "^5.9.3",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2"
-  }
+  },
+  "keywords": [
+    "dataverse",
+    "power platform",
+    "dynamics 365",
+    "choices",
+    "choice",
+    "optionset",
+    "option set",
+    "picklist",
+    "metadata",
+    "dvforgelab",
+    "powerapps",
+    "power apps",
+    "crm",
+    "model driven app",
+    "microsoft dataverse"
+  ],
+  "publisher": "dv-forgelab",
+  "icon": "images/dv-utilities-icon-128.png",
+    "repository": {
+    "type": "git",
+    "url": "https://github.com/yongjinsim-sudo/dv-choice-editor"
+  },
+  "bugs": {
+    "url": "https://github.com/yongjinsim-sudo/dv-choice-editor/issues"
+  },
+  "homepage": "https://github.com/yongjinsim-sudo/dv-choice-editor"
 }
