@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { ChoiceMetadataClient } from '../dataverse/choiceMetadataClient';
 import { ChoiceMutationClient } from '../dataverse/choiceMutationClient';
+import { ChoiceUsageClient } from '../dataverse/choiceUsageClient';
 import { DataverseConnection, getDataverseConnection } from '../dataverse/dataverseConnection';
 import { ChoiceEditorState, createInitialChoiceEditorState } from '../product/choiceEditorState';
 import { buildChoiceEditorViewModel } from '../product/choiceEditorViewModelBuilder';
@@ -27,6 +28,7 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 	let connection: DataverseConnection | undefined;
 	let metadataClient: ChoiceMetadataClient | undefined;
 	let mutationClient: ChoiceMutationClient | undefined;
+	let usageClient: ChoiceUsageClient | undefined;
 	const state: ChoiceEditorState = createInitialChoiceEditorState();
 
 	const panel = vscode.window.createWebviewPanel(
@@ -62,6 +64,7 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 
 			metadataClient = new ChoiceMetadataClient(connection.client);
 			mutationClient = new ChoiceMutationClient(connection.client);
+			usageClient = new ChoiceUsageClient(connection.client);
 			state.environment = {
 				label: connection.environmentLabel,
 				url: connection.environmentUrl
@@ -76,6 +79,8 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 			);
 			state.choiceColumns = [];
 			state.values = [];
+			state.usageGroups = [];
+			state.usageInspected = false;
 			state.selectedEntityLogicalName = undefined;
 			state.selectedChoiceLogicalName = undefined;
 			state.pendingChanges = [];
@@ -98,6 +103,8 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 			state.selectedChoiceLogicalName = undefined;
 			state.choiceColumns = [];
 			state.values = [];
+			state.usageGroups = [];
+			state.usageInspected = false;
 			state.pendingChanges = [];
 			state.previewOpen = false;
 			state.message = { kind: 'Info', text: `Loading choice columns for ${logicalName}...` };
@@ -123,6 +130,8 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 		try {
 			state.selectedChoiceLogicalName = logicalName;
 			state.values = [];
+			state.usageGroups = [];
+			state.usageInspected = false;
 			state.pendingChanges = [];
 			state.previewOpen = false;
 			state.message = { kind: 'Info', text: `Loading values for ${logicalName}...` };
@@ -133,6 +142,44 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 			state.message = {
 				kind: 'Info',
 				text: `${state.values.length} value(s) loaded for ${logicalName}.`
+			};
+			render();
+		} catch (error) {
+			state.message = { kind: 'Error', text: error instanceof Error ? error.message : String(error) };
+			render();
+		}
+	}
+
+
+	async function inspectUsage(): Promise<void> {
+		if (!usageClient || !state.selectedEntityLogicalName || !state.selectedChoiceLogicalName) {
+			state.message = { kind: 'Warning', text: 'Select an entity and choice column before inspecting usage.' };
+			render();
+			return;
+		}
+
+		try {
+			state.message = { kind: 'Info', text: `Inspecting potential usage for ${state.selectedChoiceLogicalName}...` };
+			state.usageGroups = [];
+			state.usageInspected = false;
+			render();
+
+			state.usageGroups = await vscode.window.withProgress(
+				{
+					location: vscode.ProgressLocation.Notification,
+					title: 'DV Choice Editor: Inspecting potential choice usage',
+					cancellable: false
+				},
+				() => usageClient!.inspectUsage(state.selectedEntityLogicalName!, state.selectedChoiceLogicalName!)
+			);
+			state.usageInspected = true;
+
+			const totalMatches = state.usageGroups.reduce((sum, group) => sum + group.items.length, 0);
+			state.message = {
+				kind: 'Info',
+				text: totalMatches
+					? `${totalMatches} potential usage reference(s) found for ${state.selectedChoiceLogicalName}.`
+					: `No potential usage references found for ${state.selectedChoiceLogicalName}.`
 			};
 			render();
 		} catch (error) {
@@ -503,6 +550,9 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 				break;
 			case 'addValue':
 				await addValue();
+				break;
+			case 'inspectUsage':
+				await inspectUsage();
 				break;
 			case 'editValue':
 				await editValue(String(message.payload?.value ?? ''));

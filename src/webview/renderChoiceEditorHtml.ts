@@ -1,4 +1,4 @@
-import { ChoiceColumnViewModel, ChoiceEditorViewModel, EntityViewModel } from '../product/choiceEditorTypes';
+import { ChoiceColumnViewModel, ChoiceEditorViewModel, ChoiceUsageGroupViewModel, EntityViewModel } from '../product/choiceEditorTypes';
 import { escapeHtml } from '../shared/escaping';
 import { choiceEditorStyles } from './choiceEditorStyles';
 import { choiceEditorScript } from './choiceEditorScript';
@@ -115,6 +115,23 @@ function renderPendingChangeLine(change: ChoiceEditorViewModel['pendingChanges']
 	return `<div class="dv-pending-item"><span class="dv-pill danger">Delete</span><span>${escapeHtml(change.value)} = ${escapeHtml(change.label)}</span>${renderRemovePendingButton(change.kind, change.value)}</div>`;
 }
 
+
+function renderUsageGroup(group: ChoiceUsageGroupViewModel): string {
+	const itemHtml = group.items.length
+		? group.items.map(item => `<li><strong>${escapeHtml(item.name)}</strong>${item.detail ? `<span class="dv-muted"> — ${escapeHtml(item.detail)}</span>` : ''}</li>`).join('')
+		: '<li class="dv-muted">No potential usage found.</li>';
+
+	const errorHtml = group.error
+		? `<div class="dv-message Warning">Could not inspect this source: ${escapeHtml(group.error)}</div>`
+		: '';
+
+	return `<div class="dv-usage-group">
+		<h3>${escapeHtml(group.kind)} <span class="dv-pill grey">${escapeHtml(group.items.length)}</span></h3>
+		${errorHtml}
+		<ul>${itemHtml}</ul>
+	</div>`;
+}
+
 function renderPreviewOperation(change: ChoiceEditorViewModel['pendingChanges'][number]): string {
 	if (change.kind === 'Add') {
 		return `<div class="dv-preview-operation"><span class="dv-pill success">InsertOptionValue</span><div><strong>Add option value</strong><br><span>Value: ${escapeHtml(change.value ?? 'auto')}</span><br><span>Label: ${escapeHtml(change.label)}</span></div></div>`;
@@ -191,6 +208,21 @@ export function renderChoiceEditorHtml(viewModel: ChoiceEditorViewModel, options
 				<button data-command="cancelPreview">Cancel preview</button>
 				<button data-command="applyAndPublish" class="${applyButtonClass}">Apply and publish</button>
 			</div>
+		</section>`
+		: '';
+
+
+	const usageHtml = hasSelectedChoice
+		? `<section class="dv-card dv-section">
+			<div class="dv-section-header">
+				<div>
+					<h2>Choice usage inspection</h2>
+					<p>Inspect forms, views, personal views, and processes for potential references to the selected choice column.</p>
+				</div>
+				<button data-command="inspectUsage">Inspect usage</button>
+			</div>
+			<div class="dv-preview-note">Usage inspection searches metadata payloads for the selected choice column logical name. Results are potential references, not runtime certainty.</div>
+			${viewModel.usageInspected ? `<div class="dv-usage-grid">${viewModel.usageGroups.map(renderUsageGroup).join('')}</div>` : '<div class="dv-empty">Run Inspect usage to search metadata references for this choice column.</div>'}
 		</section>`
 		: '';
 
@@ -295,6 +327,8 @@ export function renderChoiceEditorHtml(viewModel: ChoiceEditorViewModel, options
 			</div>
 		</section>
 
+		${usageHtml}
+
 		<section class="dv-card dv-section">
 			<h2>Pending changes</h2>
 			<p>${escapeHtml(pendingText)}</p>
@@ -308,7 +342,7 @@ export function renderChoiceEditorHtml(viewModel: ChoiceEditorViewModel, options
 
 		${previewHtml}
 
-		<div class="dv-footer-note">DV Choice Editor is a DV ForgeLab utility. DV Quick Run remains the flagship Dataverse investigation workbench.</div>
+		<div class="dv-footer-note">DV Choice Editor is a DV ForgeLab utility. <a href="https://marketplace.visualstudio.com/items?itemName=dv-forgelab.dv-quick-run">DV Quick Run</a> remains the flagship Dataverse investigation workbench.</div>
 	</main>
 	<script>${choiceEditorScript}</script>
 </body>

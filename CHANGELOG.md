@@ -4,6 +4,21 @@ All notable changes to the "DV Choice Editor" extension will be documented in th
 
 ---
 
+## [1.1.0] - 2026-06-10
+
+### Added
+
+- Shared DV ForgeLab environment setting support via `dvForgeLab.environments`.
+- Legacy `dvChoiceEditor.environments` fallback remains supported.
+- Choice usage inspection for selected choice columns.
+- Potential reference detection across forms, system views, personal views, and business rules / processes.
+- Usage inspection results grouped by metadata source.
+- DV Quick Run Marketplace hyperlink in the utility footer.
+
+### Notes
+
+- Usage inspection reports potential metadata references based on the selected choice column logical name. It does not claim runtime certainty.
+
 ## [1.0.0] - 2026-06-09
 
 ### Added

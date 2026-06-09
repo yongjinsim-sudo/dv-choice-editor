@@ -17,6 +17,8 @@ export type DataverseConnection = {
 };
 
 const activeEnvironmentKey = 'dvChoiceEditor.activeEnvironment';
+const sharedConfigurationSection = 'dvForgeLab';
+const legacyConfigurationSection = 'dvChoiceEditor';
 
 function normalizeEnvironmentUrl(input: string): string {
 	return input
@@ -30,19 +32,26 @@ function isValidEnvironmentUrl(input: string): boolean {
 }
 
 function getConfiguredEnvironments(): EnvironmentProfile[] {
-	const config = vscode.workspace.getConfiguration('dvChoiceEditor');
-	return config.get<EnvironmentProfile[]>('environments') ?? [];
+	const sharedConfig = vscode.workspace.getConfiguration(sharedConfigurationSection);
+	const sharedEnvironments = sharedConfig.get<EnvironmentProfile[]>('environments') ?? [];
+
+	if (sharedEnvironments.length) {
+		return sharedEnvironments;
+	}
+
+	const legacyConfig = vscode.workspace.getConfiguration(legacyConfigurationSection);
+	return legacyConfig.get<EnvironmentProfile[]>('environments') ?? [];
 }
 
 async function saveConfiguredEnvironment(profile: EnvironmentProfile): Promise<void> {
-	const config = vscode.workspace.getConfiguration('dvChoiceEditor');
+	const sharedConfig = vscode.workspace.getConfiguration(sharedConfigurationSection);
 	const existing = getConfiguredEnvironments();
 	const updated = [
 		...existing.filter(item => item.name.toLowerCase() !== profile.name.toLowerCase()),
 		profile
 	];
 
-	await config.update('environments', updated, vscode.ConfigurationTarget.Global);
+	await sharedConfig.update('environments', updated, vscode.ConfigurationTarget.Global);
 }
 
 async function createEnvironmentProfile(): Promise<EnvironmentProfile | undefined> {
@@ -96,7 +105,7 @@ async function pickEnvironment(context: vscode.ExtensionContext, forcePick: bool
 
 	if (!environments.length) {
 		const choice = await vscode.window.showInformationMessage(
-			'DV Choice Editor: No Dataverse environments configured yet.',
+			'DV ForgeLab: No shared Dataverse environments configured yet.',
 			'Set Up Environment',
 			'Cancel'
 		);

@@ -1,4 +1,4 @@
-import { ChoiceColumnViewModel, ChoiceValueViewModel, EntityViewModel, PendingChoiceChangeViewModel } from './choiceEditorTypes';
+import { ChoiceColumnViewModel, ChoiceUsageGroupViewModel, ChoiceValueViewModel, EntityViewModel, PendingChoiceChangeViewModel } from './choiceEditorTypes';
 
 export type ChoiceEditorState = {
 	environment?: {
@@ -8,6 +8,8 @@ export type ChoiceEditorState = {
 	entities: EntityViewModel[];
 	choiceColumns: ChoiceColumnViewModel[];
 	values: ChoiceValueViewModel[];
+	usageGroups: ChoiceUsageGroupViewModel[];
+	usageInspected: boolean;
 	selectedEntityLogicalName?: string;
 	selectedChoiceLogicalName?: string;
 	pendingChanges: PendingChoiceChangeViewModel[];
@@ -23,6 +25,8 @@ export function createInitialChoiceEditorState(): ChoiceEditorState {
 		entities: [],
 		choiceColumns: [],
 		values: [],
+		usageGroups: [],
+		usageInspected: false,
 		pendingChanges: [],
 		previewOpen: false
 	};

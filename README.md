@@ -67,6 +67,23 @@ Production-class environments display elevated publish warnings before metadata 
 * Prevent deletion of the final remaining choice value
 * Boolean columns automatically excluded
 * Choice values treated as immutable identities after creation
+* Inspect potential usage across forms, views, personal views, and processes
+
+## Shared DV ForgeLab Environment Settings
+
+DV Choice Editor supports the shared DV ForgeLab environment setting:
+
+```json
+"dvForgeLab.environments": [
+  {
+    "name": "DEV",
+    "url": "https://org.crm6.dynamics.com",
+    "tenantId": "optional-tenant-id"
+  }
+]
+```
+
+This setting can be reused by DV ForgeLab utilities. The legacy `dvChoiceEditor.environments` setting remains supported as a fallback.
 
 ---
 
@@ -108,7 +125,7 @@ DV Choice Editor brings a focused choice management workflow directly into VS Co
 
 DV Choice Editor is a focused Dataverse utility from DV ForgeLab.
 
-For operational investigation, execution, runtime analysis, and cross-environment comparison, see DV Quick Run.
+For operational investigation, execution, runtime analysis, and cross-environment comparison, see [DV Quick Run](https://marketplace.visualstudio.com/items?itemName=dv-forgelab.dv-quick-run).
 
 DV Choice Editor follows the same principles:
 

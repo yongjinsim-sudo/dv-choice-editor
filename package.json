@@ -2,13 +2,12 @@
   "name": "dv-choice-editor",
   "displayName": "DV Choice Editor",
   "description": "Preview-first Dataverse choice and option set management for VS Code.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "engines": {
     "vscode": "^1.120.0"
   },
   "categories": [
-    "Other",
-    "Data Science"
+    "Other"
   ],
   "license": "MIT",
   "activationEvents": [
@@ -25,10 +24,10 @@
     "configuration": {
       "title": "DV Choice Editor",
       "properties": {
-        "dvChoiceEditor.environments": {
+        "dvForgeLab.environments": {
           "type": "array",
           "default": [],
-          "description": "Dataverse environments available to DV Choice Editor.",
+          "description": "Shared Dataverse environments available to DV ForgeLab utilities.",
           "items": {
             "type": "object",
             "required": [
@@ -50,6 +49,33 @@
               }
             }
           }
+        },
+        "dvChoiceEditor.environments": {
+          "type": "array",
+          "default": [],
+          "description": "Legacy Dataverse environments for DV Choice Editor. Prefer dvForgeLab.environments for shared DV ForgeLab utility configuration.",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "url"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Environment label, for example DEV or SIT."
+              },
+              "url": {
+                "type": "string",
+                "description": "Dataverse environment URL, for example https://org.crm6.dynamics.com."
+              },
+              "tenantId": {
+                "type": "string",
+                "description": "Optional tenant ID for Azure CLI token acquisition."
+              }
+            }
+          },
+          "markdownDescription": "Legacy Dataverse environments for DV Choice Editor. Prefer `dvForgeLab.environments` for shared DV ForgeLab utility configuration."
         }
       }
     }
@@ -91,7 +117,7 @@
   ],
   "publisher": "dv-forgelab",
   "icon": "images/dv-utilities-icon-128.png",
-    "repository": {
+  "repository": {
     "type": "git",
     "url": "https://github.com/yongjinsim-sudo/dv-choice-editor"
   },

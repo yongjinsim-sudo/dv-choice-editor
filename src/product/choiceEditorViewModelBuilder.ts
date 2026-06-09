@@ -52,6 +52,8 @@ export function buildChoiceEditorViewModel(state: ChoiceEditorState): ChoiceEdit
 			selectedEntityLabel: selectedEntity?.displayName ?? selectedEntity?.logicalName ?? 'None'
 		},
 		values: state.values,
+		usageGroups: state.usageGroups,
+		usageInspected: state.usageInspected,
 		pendingChanges: state.pendingChanges,
 		previewOpen: state.previewOpen,
 		message: state.message
@@ -63,6 +65,8 @@ export function buildInitialChoiceEditorViewModel(): ChoiceEditorViewModel {
 		entities: [],
 		choiceColumns: [],
 		values: [],
+		usageGroups: [],
+		usageInspected: false,
 		pendingChanges: [],
 		previewOpen: false
 	});

@@ -31,6 +31,18 @@ export type ChoiceValueViewModel = {
 	pendingState: 'Unchanged' | 'Added' | 'Updated' | 'Deleted';
 };
 
+
+export type ChoiceUsageItemViewModel = {
+	name: string;
+	detail?: string;
+};
+
+export type ChoiceUsageGroupViewModel = {
+	kind: 'Forms' | 'Views' | 'Personal Views' | 'Business Rules / Processes';
+	items: ChoiceUsageItemViewModel[];
+	error?: string;
+};
+
 export type PendingChoiceChangeViewModel =
 	| { kind: 'Add'; label: string; value?: number }
 	| { kind: 'UpdateLabel'; value: number; previousLabel: string; nextLabel: string }
@@ -46,6 +58,8 @@ export type ChoiceEditorViewModel = {
 	selectedEntity?: EntityViewModel;
 	selectedChoice?: ChoiceColumnViewModel;
 	values: ChoiceValueViewModel[];
+	usageGroups: ChoiceUsageGroupViewModel[];
+	usageInspected: boolean;
 	pendingChanges: PendingChoiceChangeViewModel[];
 	previewOpen: boolean;
 	message?: {
