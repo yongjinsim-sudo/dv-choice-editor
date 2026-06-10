@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 import { ChoiceMetadataClient } from '../dataverse/choiceMetadataClient';
 import { ChoiceMutationClient } from '../dataverse/choiceMutationClient';
 import { ChoiceUsageClient } from '../dataverse/choiceUsageClient';
@@ -14,6 +16,62 @@ type WebviewMessage = {
 	command?: string;
 	payload?: Record<string, unknown>;
 };
+
+
+type ChoiceDefinitionArtifactValue = {
+	label: string;
+	value?: number | string;
+};
+
+type ChoiceDefinitionArtifact = {
+	artifactType?: string;
+	version?: string;
+	entityLogicalName?: string;
+	attributeLogicalName?: string;
+	displayName?: string;
+	values?: ChoiceDefinitionArtifactValue[];
+};
+
+function safeFileSegment(value: string | undefined, fallback: string): string {
+	const candidate = (value || fallback).trim() || fallback;
+	return candidate.replace(/[^a-z0-9_.-]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase() || fallback;
+}
+
+function parseChoiceDefinitionArtifact(raw: unknown): ChoiceDefinitionArtifact {
+	if (!raw || typeof raw !== 'object') {
+		throw new Error('Invalid DVCE definition file. Expected a JSON object.');
+	}
+
+	const candidate = raw as ChoiceDefinitionArtifact;
+	if (!Array.isArray(candidate.values)) {
+		throw new Error('Invalid DVCE definition file. Expected a values array.');
+	}
+
+	return candidate;
+}
+
+function toArtifactValue(value: unknown, index: number): ChoiceDefinitionArtifactValue {
+	if (!value || typeof value !== 'object') {
+		throw new Error(`Invalid value at index ${index}. Expected an object with label and optional value.`);
+	}
+
+	const candidate = value as ChoiceDefinitionArtifactValue;
+	const label = typeof candidate.label === 'string' ? candidate.label.trim() : '';
+	if (!label) {
+		throw new Error(`Invalid value at index ${index}. Label is required.`);
+	}
+
+	if (candidate.value === undefined || candidate.value === null || candidate.value === '') {
+		return { label };
+	}
+
+	const numericValue = Number(candidate.value);
+	if (!Number.isInteger(numericValue) || numericValue < 0) {
+		throw new Error(`Invalid value for ${label}. Option value must be a non-negative whole number.`);
+	}
+
+	return { label, value: numericValue };
+}
 
 function toChoiceValueViewModel(value: { value: number; label: string; status?: 'System' | 'Managed' | 'Custom' | 'Unknown' }): ChoiceValueViewModel {
 	return {
@@ -508,6 +566,170 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 		}
 	}
 
+
+	function buildChoiceDefinitionArtifact(): ChoiceDefinitionArtifact {
+		const selectedChoice = state.choiceColumns.find(choice => choice.logicalName === state.selectedChoiceLogicalName);
+		return {
+			artifactType: 'dvce.choiceDefinition',
+			version: '1.0',
+			entityLogicalName: state.selectedEntityLogicalName,
+			attributeLogicalName: state.selectedChoiceLogicalName,
+			displayName: selectedChoice?.displayName ?? selectedChoice?.logicalName,
+			values: state.values
+				.filter(value => value.pendingState !== 'Deleted')
+				.sort((a, b) => a.value - b.value)
+				.map(value => ({
+					label: value.label,
+					value: value.value
+				}))
+		};
+	}
+
+	async function exportJson(): Promise<void> {
+		if (!state.selectedEntityLogicalName || !state.selectedChoiceLogicalName || !state.values.length) {
+			state.message = { kind: 'Warning', text: 'Select an entity and choice column with loaded values before exporting JSON.' };
+			render();
+			return;
+		}
+
+		const artifact = buildChoiceDefinitionArtifact();
+		const defaultName = `${safeFileSegment(state.selectedEntityLogicalName, 'entity')}-${safeFileSegment(state.selectedChoiceLogicalName, 'choice')}.dvce.json`;
+		const targetUri = await vscode.window.showSaveDialog({
+			defaultUri: vscode.Uri.file(defaultName),
+			filters: {
+				'DV Choice Editor definition': ['dvce.json', 'json'],
+				JSON: ['json']
+			},
+			saveLabel: 'Export DVCE JSON'
+		});
+
+		if (!targetUri) {
+			return;
+		}
+
+		await fs.writeFile(targetUri.fsPath, `${JSON.stringify(artifact, null, 2)}\n`, 'utf8');
+		state.message = { kind: 'Info', text: `Exported ${artifact.values?.length ?? 0} choice value(s) to ${path.basename(targetUri.fsPath)}.` };
+		render();
+	}
+
+	function stageImportedValue(imported: ChoiceDefinitionArtifactValue): 'added' | 'updated' | 'skipped' {
+		const importedLabel = imported.label.trim();
+		const existingByValue = typeof imported.value === 'number'
+			? state.values.find(value => value.value === imported.value)
+			: undefined;
+		const existingByLabel = state.values.find(value => value.label.toLowerCase() === importedLabel.toLowerCase() && value.pendingState !== 'Deleted');
+
+		if (existingByValue) {
+			if (existingByValue.label === importedLabel && existingByValue.pendingState !== 'Deleted') {
+				return 'skipped';
+			}
+
+			const existingUpdate = state.pendingChanges.find(
+				(change): change is Extract<PendingChoiceChangeViewModel, { kind: 'UpdateLabel' }> => change.kind === 'UpdateLabel' && change.value === existingByValue.value
+			);
+			if (existingUpdate) {
+				existingUpdate.nextLabel = importedLabel;
+			} else if (existingByValue.pendingState === 'Added') {
+				const existingAdd = state.pendingChanges.find(
+					(change): change is Extract<PendingChoiceChangeViewModel, { kind: 'Add' }> => change.kind === 'Add' && change.value === existingByValue.value
+				);
+				if (existingAdd) {
+					existingAdd.label = importedLabel;
+				}
+			} else {
+				state.pendingChanges = state.pendingChanges.filter(change => !(change.kind === 'Delete' && change.value === existingByValue.value));
+				state.pendingChanges.push({
+					kind: 'UpdateLabel',
+					value: existingByValue.value,
+					previousLabel: existingByValue.label,
+					nextLabel: importedLabel
+				});
+			}
+
+			existingByValue.label = importedLabel;
+			existingByValue.pendingState = existingByValue.pendingState === 'Added' ? 'Added' : 'Updated';
+			return 'updated';
+		}
+
+		if (existingByLabel) {
+			return 'skipped';
+		}
+
+		const value = typeof imported.value === 'number' ? imported.value : getNextOptionValue();
+		const alreadyReserved = state.values.some(item => item.value === value) ||
+			state.pendingChanges.some(change => change.kind === 'Add' && change.value === value);
+		if (alreadyReserved) {
+			return 'skipped';
+		}
+
+		state.pendingChanges.push({ kind: 'Add', value, label: importedLabel });
+		state.values.push({
+			value,
+			label: importedLabel,
+			status: 'Custom',
+			pendingState: 'Added'
+		});
+		return 'added';
+	}
+
+	async function importJson(): Promise<void> {
+		if (!state.selectedEntityLogicalName || !state.selectedChoiceLogicalName) {
+			state.message = { kind: 'Warning', text: 'Select an entity and choice column before importing JSON.' };
+			render();
+			return;
+		}
+
+		const selected = await vscode.window.showOpenDialog({
+			canSelectFiles: true,
+			canSelectFolders: false,
+			canSelectMany: false,
+			filters: {
+				'DV Choice Editor definition': ['dvce.json', 'json'],
+				JSON: ['json']
+			},
+			openLabel: 'Import DVCE JSON'
+		});
+
+		if (!selected?.length) {
+			return;
+		}
+
+		try {
+			const raw = await fs.readFile(selected[0].fsPath, 'utf8');
+			const parsed = parseChoiceDefinitionArtifact(JSON.parse(raw));
+
+			if (parsed.entityLogicalName && parsed.entityLogicalName !== state.selectedEntityLogicalName) {
+				throw new Error(`Definition targets entity ${parsed.entityLogicalName}, but the selected entity is ${state.selectedEntityLogicalName}.`);
+			}
+
+			if (parsed.attributeLogicalName && parsed.attributeLogicalName !== state.selectedChoiceLogicalName) {
+				throw new Error(`Definition targets choice ${parsed.attributeLogicalName}, but the selected choice is ${state.selectedChoiceLogicalName}.`);
+			}
+
+			let added = 0;
+			let updated = 0;
+			let skipped = 0;
+			for (const [index, rawValue] of parsed.values!.entries()) {
+				const result = stageImportedValue(toArtifactValue(rawValue, index));
+				if (result === 'added') {
+					added += 1;
+				} else if (result === 'updated') {
+					updated += 1;
+				} else {
+					skipped += 1;
+				}
+			}
+
+			state.values = state.values.sort((a, b) => a.value - b.value);
+			state.previewOpen = false;
+			state.message = { kind: 'Info', text: `Imported ${path.basename(selected[0].fsPath)}. Added: ${added}. Updated: ${updated}. Skipped: ${skipped}.` };
+			render();
+		} catch (error) {
+			state.message = { kind: 'Error', text: error instanceof Error ? error.message : String(error) };
+			render();
+		}
+	}
+
 	async function changeEnvironment(): Promise<void> {
 		await connect(true);
 	}
@@ -553,6 +775,12 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 				break;
 			case 'inspectUsage':
 				await inspectUsage();
+				break;
+			case 'importJson':
+				await importJson();
+				break;
+			case 'exportJson':
+				await exportJson();
 				break;
 			case 'editValue':
 				await editValue(String(message.payload?.value ?? ''));

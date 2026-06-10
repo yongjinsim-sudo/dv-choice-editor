@@ -1,8 +1,8 @@
 {
   "name": "dv-choice-editor",
   "displayName": "DV Choice Editor",
-  "description": "Preview-first Dataverse choice and option set management for VS Code.",
-  "version": "1.1.0",
+  "description": "Preview-first Dataverse choice management with JSON definition import/export for VS Code.",
+  "version": "1.2.0",
   "engines": {
     "vscode": "^1.120.0"
   },
@@ -108,6 +108,10 @@
     "option set",
     "picklist",
     "metadata",
+    "definition artifacts",
+    "choice definitions",
+    "json export",
+    "json import",
     "dvforgelab",
     "powerapps",
     "power apps",

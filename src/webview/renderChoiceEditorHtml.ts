@@ -335,6 +335,8 @@ export function renderChoiceEditorHtml(viewModel: ChoiceEditorViewModel, options
 			${pendingRows}
 			<div class="dv-actions">
 				<button data-command="addValue"${hasSelectedChoice ? '' : ' disabled'}>Add value</button>
+				<button data-command="importJson"${hasSelectedChoice ? '' : ' disabled'}>Import JSON</button>
+				<button data-command="exportJson"${hasSelectedChoice && viewModel.values.length ? '' : ' disabled'}>Export JSON</button>
 				<button data-command="previewChanges"${hasPendingChanges ? '' : ' disabled'}>Preview changes</button>
 				<button data-command="clearPendingChanges"${hasPendingChanges ? '' : ' disabled'}>Clear staged changes</button>
 			</div>

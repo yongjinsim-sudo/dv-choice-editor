@@ -13,9 +13,12 @@ The extension provides a lightweight, preview-first workflow for creating, updat
 ### Highlights
 
 - Preview-first metadata updates
+- JSON choice definition import and export
 - Environment-aware publishing (DEV / TEST / PROD)
 - Staged changes before publish
 - Add, update, and delete choice values
+- Export selected choice definitions as `.dvce.json` artifacts
+- Import `.dvce.json` artifacts into the selected choice column
 - Safety guardrails for production environments
 - Built for Dataverse developers working inside VS Code
 
@@ -31,6 +34,25 @@ The extension provides a lightweight, preview-first workflow for creating, updat
 - Update choice labels
 - Delete choice values
 - Preview metadata changes before publishing
+
+### JSON Definition Artifacts
+
+DV Choice Editor can export the selected choice column as a JSON definition artifact and import compatible JSON definitions back into the selected choice column.
+
+Imported definitions are compared against the currently loaded choice values. Missing values and label changes are staged locally, then reviewed through the normal preview-first workflow before publishing.
+
+```json
+{
+  "artifactType": "dvce.choiceDefinition",
+  "version": "1.0",
+  "entityLogicalName": "account",
+  "attributeLogicalName": "new_membershiptype",
+  "values": [
+    { "label": "Gold", "value": 100000000 },
+    { "label": "Silver", "value": 100000001 }
+  ]
+}
+```
 
 ### Preview-First Workflow
 
@@ -68,6 +90,8 @@ Production-class environments display elevated publish warnings before metadata 
 * Boolean columns automatically excluded
 * Choice values treated as immutable identities after creation
 * Inspect potential usage across forms, views, personal views, and processes
+* Import JSON definitions into local staged changes
+* Export selected choices as reusable JSON definitions
 
 ## Shared DV ForgeLab Environment Settings
 
@@ -138,6 +162,10 @@ DV Choice Editor follows the same principles:
 ---
 
 ## Version
+
+### v1.2.0
+
+Added JSON choice definition import/export and `.dvce.json` artifact support.
 
 ### v1.0.0
 

@@ -4,6 +4,33 @@ All notable changes to the "DV Choice Editor" extension will be documented in th
 
 ---
 
+## [1.2.0] - 2026-06-10
+
+### Added
+
+- JSON export for the selected Dataverse choice definition.
+- JSON import for DV Choice Editor definition artifacts.
+- `.dvce.json` definition artifact shape for future DV ForgeLab ecosystem workflows.
+- Import comparison against the selected choice column to stage missing values and label updates.
+- Import summary showing added, updated, and skipped choice values.
+
+### Changed
+
+- Marketplace wording now reflects definition artifact import/export support.
+- Choice definitions can now be exported for reuse, review, or future reconstruction workflows.
+
+### Safety
+
+- Imported values are staged locally before mutation.
+- Imported JSON does not apply changes directly.
+- Imported definitions must match the selected entity and choice column when those targets are specified.
+- Preview-first apply and publish semantics remain unchanged.
+
+### Notes
+
+- JSON import/export is intentionally scoped to selected local choice columns.
+- DV Choice Editor remains a choice-value utility, not a broader metadata manager.
+
 ## [1.1.0] - 2026-06-10
 
 ### Added
