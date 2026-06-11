@@ -4,6 +4,15 @@ All notable changes to the "DV Choice Editor" extension will be documented in th
 
 ---
 
+## [1.0.2] - Documentation & Branding Refresh
+
+### Changed
+
+- Added DV ForgeLab website links across documentation.
+- Updated footer links to point to dvforgelab.com and dvquickrun.com.
+- Refreshed README screenshots and workflow documentation.
+- Improved product ecosystem references.
+
 ## [1.2.0] - 2026-06-10
 
 ### Added

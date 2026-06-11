@@ -149,7 +149,7 @@ DV Choice Editor brings a focused choice management workflow directly into VS Co
 
 DV Choice Editor is a focused Dataverse utility from DV ForgeLab.
 
-For operational investigation, execution, runtime analysis, and cross-environment comparison, see [DV Quick Run](https://marketplace.visualstudio.com/items?itemName=dv-forgelab.dv-quick-run).
+For operational investigation, execution, runtime analysis, and cross-environment comparison, see [DV Quick Run](https://www.dvquickrun.com).
 
 DV Choice Editor follows the same principles:
 
@@ -161,28 +161,4 @@ DV Choice Editor follows the same principles:
 
 ---
 
-## Version
-
-### v1.2.0
-
-Added JSON choice definition import/export and `.dvce.json` artifact support.
-
-### v1.0.0
-
-Initial public release.
-
-Features included:
-
-* Entity-scoped choice discovery
-* Choice value browsing
-* Add value workflow
-* Edit label workflow
-* Delete value workflow
-* Preview changes
-* Environment-aware publishing
-* Staged change management
-* Production safety indicators
-
----
-
-Built by **DV ForgeLab**.
+Built by **[DV ForgeLab](https://www.dvforgelab.com)**.
