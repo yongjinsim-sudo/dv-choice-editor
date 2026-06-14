@@ -265,6 +265,7 @@ export function renderChoiceEditorHtml(viewModel: ChoiceEditorViewModel, options
 				<button data-command="connect">Connect</button>
 				<button data-command="changeEnvironment">Change environment</button>
 				<button data-command="refresh">Refresh</button>
+				<button data-command="openFeedback">Feedback</button>
 			</div>
 		</section>
 
@@ -344,7 +345,7 @@ export function renderChoiceEditorHtml(viewModel: ChoiceEditorViewModel, options
 
 		${previewHtml}
 
-		<div class="dv-footer-note">DV Identity Manager is part of the <a href="https://www.dvforgelab.com">DV ForgeLab</a> Dataverse tooling ecosystem. <a href="https://www.dvquickrun.com">DV Quick Run</a> is the flagship Dataverse investigation workbench.</div>
+		<div class="dv-footer-note">DV Choice Editor is part of the <a href="https://www.dvforgelab.com">DV ForgeLab</a> Dataverse tooling ecosystem. <a href="https://www.dvquickrun.com">DV Quick Run</a> is the flagship Dataverse investigation workbench.</div>
 	</main>
 	<script>${choiceEditorScript}</script>
 </body>

@@ -4,7 +4,12 @@ All notable changes to the "DV Choice Editor" extension will be documented in th
 
 ---
 
-## [1.0.2] - Documentation & Branding Refresh
+## [1.2.2] - Feedback button
+
+- Added a Feedback button linking to the shared DV ForgeLab feedback portal.
+- Feedback opens `https://dvforgelab.com/feedback` with DV Choice Editor and the current extension version preselected.
+
+## [1.2.1] - Documentation & Branding Refresh
 
 ### Changed
 

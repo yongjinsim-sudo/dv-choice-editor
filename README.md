@@ -21,6 +21,7 @@ The extension provides a lightweight, preview-first workflow for creating, updat
 - Import `.dvce.json` artifacts into the selected choice column
 - Safety guardrails for production environments
 - Built for Dataverse developers working inside VS Code
+- Direct DV ForgeLab feedback integration
 
 ---
 
@@ -120,6 +121,22 @@ DV Choice Editor: Open Choice Editor
 ```
 
 ---
+
+## Feedback
+
+DV Choice Editor includes direct integration with the DV ForgeLab feedback portal.
+
+Share:
+
+* Feature requests
+* Bug reports
+* Metadata reconstruction scenarios
+* Workflow suggestions
+* Product feedback
+
+Feedback is routed through the shared DV ForgeLab feedback experience and automatically identifies DV Choice Editor as the source product.
+
+https://www.dvforgelab.com/feedback
 
 ## Scope
 

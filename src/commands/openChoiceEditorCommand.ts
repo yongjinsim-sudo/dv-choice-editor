@@ -11,6 +11,7 @@ import { ChoiceValueViewModel, PendingChoiceChangeViewModel } from '../product/c
 import { renderChoiceEditorHtml } from '../webview/renderChoiceEditorHtml';
 
 const panelTitle = 'DV Choice Editor';
+const feedbackProductCode = 'dvce';
 
 type WebviewMessage = {
 	command?: string;
@@ -753,6 +754,12 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 		await connect();
 	}
 
+	async function openFeedback(): Promise<void> {
+		const extensionVersion = String(context.extension.packageJSON?.version ?? 'unknown');
+		const feedbackUrl = `https://dvforgelab.com/feedback?product=${feedbackProductCode}&version=${encodeURIComponent(extensionVersion)}`;
+		await vscode.env.openExternal(vscode.Uri.parse(feedbackUrl));
+	}
+
 	panel.webview.onDidReceiveMessage(async (message: WebviewMessage) => {
 		switch (message.command) {
 			case 'connect':
@@ -763,6 +770,9 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 				break;
 			case 'refresh':
 				await refresh();
+				break;
+			case 'openFeedback':
+				await openFeedback();
 				break;
 			case 'selectEntity':
 				await selectEntity(String(message.payload?.logicalName ?? ''));

@@ -2,7 +2,7 @@
   "name": "dv-choice-editor",
   "displayName": "DV Choice Editor",
   "description": "Preview-first Dataverse choice management with JSON definition import/export for VS Code.",
-  "version": "1.2.0",
+  "version": "1.2.2",
   "engines": {
     "vscode": "^1.120.0"
   },
