@@ -1,4 +1,5 @@
 import { PendingChoiceChangeViewModel } from '../product/choiceEditorTypes';
+import { ChoiceTarget } from '../product/choiceTargetTypes';
 import { DataverseHttpClient } from './dataverseHttpClient';
 
 export type ChoiceMutationResult = {
@@ -26,16 +27,34 @@ function buildLabel(label: string): unknown {
 	};
 }
 
-function buildPublishXml(entityLogicalName: string): string {
-	return `<importexportxml><entities><entity>${entityLogicalName}</entity></entities></importexportxml>`;
+function buildPublishXml(target: ChoiceTarget): string {
+	if (target.scope === 'local') {
+		return `<importexportxml><entities><entity>${target.entityLogicalName}</entity></entities></importexportxml>`;
+	}
+
+	return `<importexportxml><optionsets><optionset>${target.optionSetName}</optionset></optionsets></importexportxml>`;
+}
+
+function buildOptionRequest(target: ChoiceTarget, base: Record<string, unknown>): Record<string, unknown> {
+	if (target.scope === 'local') {
+		return {
+			EntityLogicalName: target.entityLogicalName,
+			AttributeLogicalName: target.attributeLogicalName,
+			...base
+		};
+	}
+
+	return {
+		OptionSetName: target.optionSetName,
+		...base
+	};
 }
 
 export class ChoiceMutationClient {
 	constructor(private readonly client: DataverseHttpClient) {}
 
 	async applyChanges(
-		entityLogicalName: string,
-		choiceLogicalName: string,
+		target: ChoiceTarget,
 		changes: PendingChoiceChangeViewModel[]
 	): Promise<ChoiceMutationResult> {
 		if (!changes.length) {
@@ -47,11 +66,9 @@ export class ChoiceMutationClient {
 
 		for (const change of changes) {
 			if (change.kind === 'Add') {
-				const body: Record<string, unknown> = {
-					EntityLogicalName: entityLogicalName,
-					AttributeLogicalName: choiceLogicalName,
+				const body: Record<string, unknown> = buildOptionRequest(target, {
 					Label: buildLabel(change.label)
-				};
+				});
 
 				if (typeof change.value === 'number') {
 					body.Value = change.value;
@@ -62,21 +79,17 @@ export class ChoiceMutationClient {
 			}
 
 			if (change.kind === 'UpdateLabel') {
-				await this.client.post('/UpdateOptionValue', {
-					EntityLogicalName: entityLogicalName,
-					AttributeLogicalName: choiceLogicalName,
+				await this.client.post('/UpdateOptionValue', buildOptionRequest(target, {
 					Value: change.value,
 					Label: buildLabel(change.nextLabel),
 					MergeLabels: true
-				});
+				}));
 				continue;
 			}
 
-			await this.client.post('/DeleteOptionValue', {
-				EntityLogicalName: entityLogicalName,
-				AttributeLogicalName: choiceLogicalName,
+			await this.client.post('/DeleteOptionValue', buildOptionRequest(target, {
 				Value: change.value
-			});
+			}));
 		}
 
 		return {
@@ -85,14 +98,18 @@ export class ChoiceMutationClient {
 		};
 	}
 
-	async publishEntity(entityLogicalName: string): Promise<ChoiceMutationResult> {
+	async publishTarget(target: ChoiceTarget): Promise<ChoiceMutationResult> {
 		await this.client.post('/PublishXml', {
-			ParameterXml: buildPublishXml(entityLogicalName)
+			ParameterXml: buildPublishXml(target)
 		});
 
 		return {
 			success: true,
-			message: `${entityLogicalName} published.`
+			message: target.scope === 'local' ? `${target.entityLogicalName} published.` : `${target.optionSetName} published.`
 		};
+	}
+
+	async publishEntity(entityLogicalName: string): Promise<ChoiceMutationResult> {
+		return this.publishTarget({ scope: 'local', entityLogicalName, attributeLogicalName: '' });
 	}
 }

@@ -5,9 +5,12 @@ import { ChoiceMetadataClient } from '../dataverse/choiceMetadataClient';
 import { ChoiceMutationClient } from '../dataverse/choiceMutationClient';
 import { ChoiceUsageClient } from '../dataverse/choiceUsageClient';
 import { DataverseConnection, getDataverseConnection } from '../dataverse/dataverseConnection';
-import { ChoiceEditorState, createInitialChoiceEditorState } from '../product/choiceEditorState';
+import { ChoiceEditorState, createInitialChoiceEditorState, getSelectedChoiceTarget } from '../product/choiceEditorState';
+import { buildChoiceDefinitionArtifact, normalizeChoiceDefinitionArtifact } from '../product/choiceDefinitionArtifact';
+import { getChoiceTargetLabel, isSameChoiceTarget } from '../product/choiceTargetTypes';
 import { buildChoiceEditorViewModel } from '../product/choiceEditorViewModelBuilder';
 import { ChoiceValueViewModel, PendingChoiceChangeViewModel } from '../product/choiceEditorTypes';
+import { getNextOptionValue, stageImportedValues } from '../product/choiceStagingService';
 import { renderChoiceEditorHtml } from '../webview/renderChoiceEditorHtml';
 
 const panelTitle = 'DV Choice Editor';
@@ -18,60 +21,9 @@ type WebviewMessage = {
 	payload?: Record<string, unknown>;
 };
 
-
-type ChoiceDefinitionArtifactValue = {
-	label: string;
-	value?: number | string;
-};
-
-type ChoiceDefinitionArtifact = {
-	artifactType?: string;
-	version?: string;
-	entityLogicalName?: string;
-	attributeLogicalName?: string;
-	displayName?: string;
-	values?: ChoiceDefinitionArtifactValue[];
-};
-
 function safeFileSegment(value: string | undefined, fallback: string): string {
 	const candidate = (value || fallback).trim() || fallback;
 	return candidate.replace(/[^a-z0-9_.-]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase() || fallback;
-}
-
-function parseChoiceDefinitionArtifact(raw: unknown): ChoiceDefinitionArtifact {
-	if (!raw || typeof raw !== 'object') {
-		throw new Error('Invalid DVCE definition file. Expected a JSON object.');
-	}
-
-	const candidate = raw as ChoiceDefinitionArtifact;
-	if (!Array.isArray(candidate.values)) {
-		throw new Error('Invalid DVCE definition file. Expected a values array.');
-	}
-
-	return candidate;
-}
-
-function toArtifactValue(value: unknown, index: number): ChoiceDefinitionArtifactValue {
-	if (!value || typeof value !== 'object') {
-		throw new Error(`Invalid value at index ${index}. Expected an object with label and optional value.`);
-	}
-
-	const candidate = value as ChoiceDefinitionArtifactValue;
-	const label = typeof candidate.label === 'string' ? candidate.label.trim() : '';
-	if (!label) {
-		throw new Error(`Invalid value at index ${index}. Label is required.`);
-	}
-
-	if (candidate.value === undefined || candidate.value === null || candidate.value === '') {
-		return { label };
-	}
-
-	const numericValue = Number(candidate.value);
-	if (!Number.isInteger(numericValue) || numericValue < 0) {
-		throw new Error(`Invalid value for ${label}. Option value must be a non-negative whole number.`);
-	}
-
-	return { label, value: numericValue };
 }
 
 function toChoiceValueViewModel(value: { value: number; label: string; status?: 'System' | 'Managed' | 'Custom' | 'Unknown' }): ChoiceValueViewModel {
@@ -109,6 +61,14 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 		});
 	}
 
+	function resetTargetState(): void {
+		state.values = [];
+		state.usageGroups = [];
+		state.usageInspected = false;
+		state.pendingChanges = [];
+		state.previewOpen = false;
+	}
+
 	async function connect(forcePick = false): Promise<void> {
 		try {
 			state.message = { kind: 'Info', text: 'Connecting to Dataverse...' };
@@ -128,28 +88,50 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 				label: connection.environmentLabel,
 				url: connection.environmentUrl
 			};
-			state.entities = await vscode.window.withProgress(
-				{
-					location: vscode.ProgressLocation.Notification,
-					title: 'DV Choice Editor: Loading Dataverse entities',
-					cancellable: false
-				},
-				() => metadataClient!.listEntities()
-			);
+			state.entities = [];
+			state.globalChoices = [];
 			state.choiceColumns = [];
-			state.values = [];
-			state.usageGroups = [];
-			state.usageInspected = false;
 			state.selectedEntityLogicalName = undefined;
 			state.selectedChoiceLogicalName = undefined;
-			state.pendingChanges = [];
-			state.previewOpen = false;
-			state.message = { kind: 'Info', text: `Connected to ${connection.environmentLabel}. ${state.entities.length} entities loaded.` };
+			state.selectedGlobalChoiceName = undefined;
+			resetTargetState();
+
+			const loaded = await vscode.window.withProgress(
+				{
+					location: vscode.ProgressLocation.Notification,
+					title: 'DV Choice Editor: Loading Dataverse choice metadata',
+					cancellable: false
+				},
+				async () => ({
+					entities: await metadataClient!.listEntities(),
+					globalChoices: await metadataClient!.listGlobalChoices()
+				})
+			);
+			state.entities = loaded.entities;
+			state.globalChoices = loaded.globalChoices;
+			state.message = {
+				kind: 'Info',
+				text: `Connected to ${connection.environmentLabel}. ${state.entities.length} entities and ${state.globalChoices.length} global choice(s) loaded.`
+			};
 			render();
 		} catch (error) {
 			state.message = { kind: 'Error', text: error instanceof Error ? error.message : String(error) };
 			render();
 		}
+	}
+
+	async function setChoiceScope(scope: string): Promise<void> {
+		const nextScope = scope === 'global' ? 'global' : 'local';
+		if (state.choiceScope === nextScope) {
+			return;
+		}
+
+		state.choiceScope = nextScope;
+		state.selectedChoiceLogicalName = undefined;
+		state.selectedGlobalChoiceName = undefined;
+		resetTargetState();
+		state.message = { kind: 'Info', text: nextScope === 'global' ? 'Global choice mode selected.' : 'Local choice column mode selected.' };
+		render();
 	}
 
 	async function selectEntity(logicalName: string): Promise<void> {
@@ -158,21 +140,18 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 		}
 
 		try {
+			state.choiceScope = 'local';
 			state.selectedEntityLogicalName = logicalName;
 			state.selectedChoiceLogicalName = undefined;
 			state.choiceColumns = [];
-			state.values = [];
-			state.usageGroups = [];
-			state.usageInspected = false;
-			state.pendingChanges = [];
-			state.previewOpen = false;
+			resetTargetState();
 			state.message = { kind: 'Info', text: `Loading choice columns for ${logicalName}...` };
 			render();
 
 			state.choiceColumns = await metadataClient.listChoiceColumns(logicalName);
 			state.message = {
 				kind: 'Info',
-				text: `${state.choiceColumns.length} choice column(s) loaded for ${logicalName}.`
+				text: `${state.choiceColumns.length} local choice column(s) loaded for ${logicalName}.`
 			};
 			render();
 		} catch (error) {
@@ -187,12 +166,9 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 		}
 
 		try {
+			state.choiceScope = 'local';
 			state.selectedChoiceLogicalName = logicalName;
-			state.values = [];
-			state.usageGroups = [];
-			state.usageInspected = false;
-			state.pendingChanges = [];
-			state.previewOpen = false;
+			resetTargetState();
 			state.message = { kind: 'Info', text: `Loading values for ${logicalName}...` };
 			render();
 
@@ -209,8 +185,45 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 		}
 	}
 
+	async function selectGlobalChoice(name: string): Promise<void> {
+		if (!metadataClient || !name) {
+			return;
+		}
+
+		try {
+			state.choiceScope = 'global';
+			state.selectedGlobalChoiceName = name;
+			resetTargetState();
+			state.message = { kind: 'Info', text: `Loading values for global choice ${name}...` };
+			render();
+
+			const details = await metadataClient.getGlobalChoiceDetails(name);
+			state.values = details.values.map(toChoiceValueViewModel);
+			state.globalChoices = state.globalChoices.map(choice => choice.name === name ? {
+				...choice,
+				displayName: details.displayName ?? choice.displayName,
+				type: details.type ?? choice.type,
+				isCustomizable: details.isCustomizable ?? choice.isCustomizable
+			} : choice);
+			const mutabilityNote = details.isCustomizable === false ? ' This global choice is read-only/non-customizable.' : '';
+			state.message = {
+				kind: details.isCustomizable === false ? 'Warning' : 'Info',
+				text: `${state.values.length} value(s) loaded for global choice ${name}.${mutabilityNote}`
+			};
+			render();
+		} catch (error) {
+			state.message = { kind: 'Error', text: error instanceof Error ? error.message : String(error) };
+			render();
+		}
+	}
 
 	async function inspectUsage(): Promise<void> {
+		if (state.choiceScope === 'global') {
+			state.message = { kind: 'Warning', text: 'Usage inspection is currently available for local entity choice columns only.' };
+			render();
+			return;
+		}
+
 		if (!usageClient || !state.selectedEntityLogicalName || !state.selectedChoiceLogicalName) {
 			state.message = { kind: 'Warning', text: 'Select an entity and choice column before inspecting usage.' };
 			render();
@@ -247,19 +260,41 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 		}
 	}
 
-	function getNextOptionValue(): number {
-		const existingValues = state.values.map(value => value.value);
-		const pendingValues = state.pendingChanges
-			.filter((change): change is Extract<PendingChoiceChangeViewModel, { kind: 'Add' }> => change.kind === 'Add' && typeof change.value === 'number')
-			.map(change => change.value as number);
-		const maxValue = Math.max(999999, ...existingValues, ...pendingValues);
-		return maxValue + 1;
+	function getTargetNameForMessage(): string {
+		return getChoiceTargetLabel(getSelectedChoiceTarget(state));
+	}
+
+	function getSelectedGlobalChoiceMetadata() {
+		return state.globalChoices.find(choice => choice.name === state.selectedGlobalChoiceName);
+	}
+
+	function isSelectedTargetReadOnly(): boolean {
+		return state.choiceScope === 'global' && getSelectedGlobalChoiceMetadata()?.isCustomizable === false;
+	}
+
+	function warnIfSelectedTargetReadOnly(action: string): boolean {
+		if (!isSelectedTargetReadOnly()) {
+			return false;
+		}
+
+		state.previewOpen = false;
+		state.message = {
+			kind: 'Warning',
+			text: `Cannot ${action}. Global choice ${state.selectedGlobalChoiceName ?? 'selected target'} is read-only/non-customizable in this environment.`
+		};
+		render();
+		return true;
 	}
 
 	async function addValue(): Promise<void> {
-		if (!state.selectedEntityLogicalName || !state.selectedChoiceLogicalName) {
-			state.message = { kind: 'Warning', text: 'Select an entity and choice column before adding a value.' };
+		const target = getSelectedChoiceTarget(state);
+		if (!target) {
+			state.message = { kind: 'Warning', text: 'Select a local or global choice target before adding a value.' };
 			render();
+			return;
+		}
+
+		if (warnIfSelectedTargetReadOnly('add choice values')) {
 			return;
 		}
 
@@ -274,7 +309,7 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 			return;
 		}
 
-		const defaultValue = String(getNextOptionValue());
+		const defaultValue = String(getNextOptionValue(state.values, state.pendingChanges));
 		const rawValue = await vscode.window.showInputBox({
 			prompt: 'Enter option value',
 			placeHolder: defaultValue,
@@ -307,7 +342,7 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 			pendingState: 'Added'
 		});
 		state.values = state.values.sort((a, b) => a.value - b.value);
-		state.message = { kind: 'Info', text: `Staged new value ${value} for ${state.selectedChoiceLogicalName}.` };
+		state.message = { kind: 'Info', text: `Staged new value ${value} for ${getTargetNameForMessage()}.` };
 		render();
 	}
 
@@ -325,6 +360,10 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 		if (!Number.isFinite(value) || !target || target.pendingState === 'Deleted') {
 			state.message = { kind: 'Warning', text: 'Select an editable choice value first.' };
 			render();
+			return;
+		}
+
+		if (warnIfSelectedTargetReadOnly('edit choice labels')) {
 			return;
 		}
 
@@ -387,6 +426,10 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 		if (!Number.isFinite(value) || !target || target.pendingState === 'Deleted') {
 			state.message = { kind: 'Warning', text: 'Select a deletable choice value first.' };
 			render();
+			return;
+		}
+
+		if (warnIfSelectedTargetReadOnly('delete choice values')) {
 			return;
 		}
 
@@ -502,7 +545,11 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 	}
 
 	async function previewChanges(): Promise<void> {
-		if (!state.selectedEntityLogicalName || !state.selectedChoiceLogicalName || !state.pendingChanges.length) {
+		if (warnIfSelectedTargetReadOnly('preview/apply reconstruction changes')) {
+			return;
+		}
+
+		if (!getSelectedChoiceTarget(state) || !state.pendingChanges.length) {
 			state.message = { kind: 'Warning', text: 'No pending changes to preview.' };
 			state.previewOpen = false;
 			render();
@@ -510,7 +557,7 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 		}
 
 		state.previewOpen = true;
-		state.message = { kind: 'Info', text: `Previewing ${state.pendingChanges.length} pending change(s) for ${state.selectedChoiceLogicalName}.` };
+		state.message = { kind: 'Info', text: `Previewing ${state.pendingChanges.length} pending change(s) for ${getTargetNameForMessage()}.` };
 		render();
 	}
 
@@ -521,10 +568,15 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 	}
 
 	async function applyAndPublish(): Promise<void> {
-		if (!mutationClient || !state.selectedEntityLogicalName || !state.selectedChoiceLogicalName || !state.pendingChanges.length) {
+		const target = getSelectedChoiceTarget(state);
+		if (!mutationClient || !target || !state.pendingChanges.length) {
 			state.message = { kind: 'Warning', text: 'No pending changes to apply.' };
 			state.previewOpen = false;
 			render();
+			return;
+		}
+
+		if (warnIfSelectedTargetReadOnly('apply reconstruction changes')) {
 			return;
 		}
 
@@ -544,12 +596,8 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 					cancellable: false
 				},
 				async () => {
-					await mutationClient!.applyChanges(
-						state.selectedEntityLogicalName!,
-						state.selectedChoiceLogicalName!,
-						state.pendingChanges
-					);
-					await mutationClient!.publishEntity(state.selectedEntityLogicalName!);
+					await mutationClient!.applyChanges(target, state.pendingChanges);
+					await mutationClient!.publishTarget(target);
 				}
 			);
 
@@ -558,43 +606,34 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 			state.previewOpen = false;
 			state.message = {
 				kind: 'Info',
-				text: `${appliedCount} choice change(s) applied and ${state.selectedEntityLogicalName} published.`
+				text: `${appliedCount} choice change(s) applied and ${getChoiceTargetLabel(target)} published.`
 			};
-			await selectChoice(state.selectedChoiceLogicalName);
+			if (target.scope === 'global') {
+				await selectGlobalChoice(target.optionSetName);
+			} else {
+				await selectChoice(target.attributeLogicalName);
+			}
 		} catch (error) {
 			state.message = { kind: 'Error', text: error instanceof Error ? error.message : String(error) };
 			render();
 		}
 	}
 
-
-	function buildChoiceDefinitionArtifact(): ChoiceDefinitionArtifact {
-		const selectedChoice = state.choiceColumns.find(choice => choice.logicalName === state.selectedChoiceLogicalName);
-		return {
-			artifactType: 'dvce.choiceDefinition',
-			version: '1.0',
-			entityLogicalName: state.selectedEntityLogicalName,
-			attributeLogicalName: state.selectedChoiceLogicalName,
-			displayName: selectedChoice?.displayName ?? selectedChoice?.logicalName,
-			values: state.values
-				.filter(value => value.pendingState !== 'Deleted')
-				.sort((a, b) => a.value - b.value)
-				.map(value => ({
-					label: value.label,
-					value: value.value
-				}))
-		};
-	}
-
 	async function exportJson(): Promise<void> {
-		if (!state.selectedEntityLogicalName || !state.selectedChoiceLogicalName || !state.values.length) {
-			state.message = { kind: 'Warning', text: 'Select an entity and choice column with loaded values before exporting JSON.' };
+		const target = getSelectedChoiceTarget(state);
+		if (!target || !state.values.length) {
+			state.message = { kind: 'Warning', text: 'Select a local or global choice with loaded values before exporting JSON.' };
 			render();
 			return;
 		}
 
-		const artifact = buildChoiceDefinitionArtifact();
-		const defaultName = `${safeFileSegment(state.selectedEntityLogicalName, 'entity')}-${safeFileSegment(state.selectedChoiceLogicalName, 'choice')}.dvce.json`;
+		const displayName = target.scope === 'global'
+			? state.globalChoices.find(choice => choice.name === target.optionSetName)?.displayName ?? target.optionSetName
+			: state.choiceColumns.find(choice => choice.logicalName === target.attributeLogicalName)?.displayName ?? target.attributeLogicalName;
+		const artifact = buildChoiceDefinitionArtifact(target, state.values, displayName);
+		const defaultName = target.scope === 'global'
+			? `global-${safeFileSegment(target.optionSetName, 'choice')}.dvce.json`
+			: `${safeFileSegment(target.entityLogicalName, 'entity')}-${safeFileSegment(target.attributeLogicalName, 'choice')}.dvce.json`;
 		const targetUri = await vscode.window.showSaveDialog({
 			defaultUri: vscode.Uri.file(defaultName),
 			filters: {
@@ -613,69 +652,44 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 		render();
 	}
 
-	function stageImportedValue(imported: ChoiceDefinitionArtifactValue): 'added' | 'updated' | 'skipped' {
-		const importedLabel = imported.label.trim();
-		const existingByValue = typeof imported.value === 'number'
-			? state.values.find(value => value.value === imported.value)
-			: undefined;
-		const existingByLabel = state.values.find(value => value.label.toLowerCase() === importedLabel.toLowerCase() && value.pendingState !== 'Deleted');
-
-		if (existingByValue) {
-			if (existingByValue.label === importedLabel && existingByValue.pendingState !== 'Deleted') {
-				return 'skipped';
+	async function ensureImportedTargetSelected(importedTarget: ReturnType<typeof normalizeChoiceDefinitionArtifact>['target']): Promise<void> {
+		if (!importedTarget) {
+			if (!getSelectedChoiceTarget(state)) {
+				throw new Error('Definition does not include a target. Select a local or global choice before importing this legacy artifact.');
 			}
+			return;
+		}
 
-			const existingUpdate = state.pendingChanges.find(
-				(change): change is Extract<PendingChoiceChangeViewModel, { kind: 'UpdateLabel' }> => change.kind === 'UpdateLabel' && change.value === existingByValue.value
-			);
-			if (existingUpdate) {
-				existingUpdate.nextLabel = importedLabel;
-			} else if (existingByValue.pendingState === 'Added') {
-				const existingAdd = state.pendingChanges.find(
-					(change): change is Extract<PendingChoiceChangeViewModel, { kind: 'Add' }> => change.kind === 'Add' && change.value === existingByValue.value
-				);
-				if (existingAdd) {
-					existingAdd.label = importedLabel;
-				}
-			} else {
-				state.pendingChanges = state.pendingChanges.filter(change => !(change.kind === 'Delete' && change.value === existingByValue.value));
-				state.pendingChanges.push({
-					kind: 'UpdateLabel',
-					value: existingByValue.value,
-					previousLabel: existingByValue.label,
-					nextLabel: importedLabel
-				});
+		const currentTarget = getSelectedChoiceTarget(state);
+		if (isSameChoiceTarget(currentTarget, importedTarget)) {
+			return;
+		}
+
+		if (importedTarget.scope === 'global') {
+			if (!state.globalChoices.some(choice => choice.name === importedTarget.optionSetName)) {
+				throw new Error(`Definition targets global choice ${importedTarget.optionSetName}, but it was not found in the connected environment.`);
 			}
-
-			existingByValue.label = importedLabel;
-			existingByValue.pendingState = existingByValue.pendingState === 'Added' ? 'Added' : 'Updated';
-			return 'updated';
+			await selectGlobalChoice(importedTarget.optionSetName);
+			return;
 		}
 
-		if (existingByLabel) {
-			return 'skipped';
+		if (!state.entities.some(entity => entity.logicalName === importedTarget.entityLogicalName)) {
+			throw new Error(`Definition targets entity ${importedTarget.entityLogicalName}, but it was not found in the connected environment.`);
 		}
 
-		const value = typeof imported.value === 'number' ? imported.value : getNextOptionValue();
-		const alreadyReserved = state.values.some(item => item.value === value) ||
-			state.pendingChanges.some(change => change.kind === 'Add' && change.value === value);
-		if (alreadyReserved) {
-			return 'skipped';
+		if (state.selectedEntityLogicalName !== importedTarget.entityLogicalName) {
+			await selectEntity(importedTarget.entityLogicalName);
 		}
 
-		state.pendingChanges.push({ kind: 'Add', value, label: importedLabel });
-		state.values.push({
-			value,
-			label: importedLabel,
-			status: 'Custom',
-			pendingState: 'Added'
-		});
-		return 'added';
+		if (!state.choiceColumns.some(choice => choice.logicalName === importedTarget.attributeLogicalName)) {
+			throw new Error(`Definition targets choice ${importedTarget.attributeLogicalName}, but it was not found on ${importedTarget.entityLogicalName}.`);
+		}
+		await selectChoice(importedTarget.attributeLogicalName);
 	}
 
 	async function importJson(): Promise<void> {
-		if (!state.selectedEntityLogicalName || !state.selectedChoiceLogicalName) {
-			state.message = { kind: 'Warning', text: 'Select an entity and choice column before importing JSON.' };
+		if (!connection || !metadataClient) {
+			state.message = { kind: 'Warning', text: 'Connect to Dataverse before importing JSON.' };
 			render();
 			return;
 		}
@@ -697,33 +711,26 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 
 		try {
 			const raw = await fs.readFile(selected[0].fsPath, 'utf8');
-			const parsed = parseChoiceDefinitionArtifact(JSON.parse(raw));
+			const parsed = normalizeChoiceDefinitionArtifact(JSON.parse(raw));
+			await ensureImportedTargetSelected(parsed.target);
 
-			if (parsed.entityLogicalName && parsed.entityLogicalName !== state.selectedEntityLogicalName) {
-				throw new Error(`Definition targets entity ${parsed.entityLogicalName}, but the selected entity is ${state.selectedEntityLogicalName}.`);
+			if (isSelectedTargetReadOnly()) {
+				state.pendingChanges = [];
+				state.previewOpen = false;
+				state.message = {
+					kind: 'Warning',
+					text: `Imported ${path.basename(selected[0].fsPath)} for comparison only. Global choice ${state.selectedGlobalChoiceName ?? 'selected target'} is read-only/non-customizable, so no reconstruction changes were staged.`
+				};
+				render();
+				return;
 			}
 
-			if (parsed.attributeLogicalName && parsed.attributeLogicalName !== state.selectedChoiceLogicalName) {
-				throw new Error(`Definition targets choice ${parsed.attributeLogicalName}, but the selected choice is ${state.selectedChoiceLogicalName}.`);
-			}
-
-			let added = 0;
-			let updated = 0;
-			let skipped = 0;
-			for (const [index, rawValue] of parsed.values!.entries()) {
-				const result = stageImportedValue(toArtifactValue(rawValue, index));
-				if (result === 'added') {
-					added += 1;
-				} else if (result === 'updated') {
-					updated += 1;
-				} else {
-					skipped += 1;
-				}
-			}
-
-			state.values = state.values.sort((a, b) => a.value - b.value);
+			const summary = stageImportedValues(state, parsed.values);
 			state.previewOpen = false;
-			state.message = { kind: 'Info', text: `Imported ${path.basename(selected[0].fsPath)}. Added: ${added}. Updated: ${updated}. Skipped: ${skipped}.` };
+			state.message = {
+				kind: 'Info',
+				text: `Imported ${path.basename(selected[0].fsPath)}. Added: ${summary.added}. Updated: ${summary.updated}. Skipped: ${summary.skipped}.`
+			};
 			render();
 		} catch (error) {
 			state.message = { kind: 'Error', text: error instanceof Error ? error.message : String(error) };
@@ -741,8 +748,14 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 			return;
 		}
 
-		if (state.selectedChoiceLogicalName) {
-			await selectChoice(state.selectedChoiceLogicalName);
+		const target = getSelectedChoiceTarget(state);
+		if (target?.scope === 'global') {
+			await selectGlobalChoice(target.optionSetName);
+			return;
+		}
+
+		if (target?.scope === 'local') {
+			await selectChoice(target.attributeLogicalName);
 			return;
 		}
 
@@ -774,11 +787,17 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 			case 'openFeedback':
 				await openFeedback();
 				break;
+			case 'setChoiceScope':
+				await setChoiceScope(String(message.payload?.scope ?? 'local'));
+				break;
 			case 'selectEntity':
 				await selectEntity(String(message.payload?.logicalName ?? ''));
 				break;
 			case 'selectChoice':
 				await selectChoice(String(message.payload?.logicalName ?? ''));
+				break;
+			case 'selectGlobalChoice':
+				await selectGlobalChoice(String(message.payload?.name ?? ''));
 				break;
 			case 'addValue':
 				await addValue();

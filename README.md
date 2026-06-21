@@ -2,9 +2,28 @@
 
 Dataverse choice management inside VS Code.
 
-**DV Choice Editor** is a focused utility from **DV ForgeLab** for managing Dataverse local choice (option set) values directly from VS Code.
+**DV Choice Editor** is a focused utility from **DV ForgeLab** for managing Dataverse local choice columns and global choices directly from VS Code.
 
 The extension provides a lightweight, preview-first workflow for creating, updating, deleting, reviewing, and publishing Dataverse choice values without leaving the development workspace.
+
+---
+
+## v1.3.0 — Global Choice Support
+
+DV Choice Editor now supports both local entity choice columns and global choices through the same preview-first workflow.
+
+Supported local/global operations:
+
+- Load choice values
+- Add values
+- Update labels
+- Delete values
+- Preview staged metadata changes
+- Apply and publish explicitly
+- Export `.dvce.json` definition artifacts
+- Import `.dvce.json` definition artifacts for reconstruction
+
+The v2.0 artifact contract includes an explicit `scope` field so DV Quick Run can generate choice reconstruction artifacts that DV Choice Editor can import directly. Legacy v1.0 local artifacts remain supported.
 
 ## Screenshot
 
@@ -13,12 +32,13 @@ The extension provides a lightweight, preview-first workflow for creating, updat
 ### Highlights
 
 - Preview-first metadata updates
+- Local and global choice support
 - JSON choice definition import and export
 - Environment-aware publishing (DEV / TEST / PROD)
 - Staged changes before publish
 - Add, update, and delete choice values
 - Export selected choice definitions as `.dvce.json` artifacts
-- Import `.dvce.json` artifacts into the selected choice column
+- Import `.dvce.json` artifacts into local or global choice targets
 - Safety guardrails for production environments
 - Built for Dataverse developers working inside VS Code
 - Direct DV ForgeLab feedback integration
@@ -29,7 +49,8 @@ The extension provides a lightweight, preview-first workflow for creating, updat
 
 ### Manage Dataverse Choice Values
 
-- Browse entity-scoped choice columns
+- Browse local entity choice columns
+- Browse global choices
 - View existing choice values
 - Create new choice values
 - Update choice labels
@@ -38,31 +59,53 @@ The extension provides a lightweight, preview-first workflow for creating, updat
 
 ### JSON Definition Artifacts
 
-DV Choice Editor can export the selected choice column as a JSON definition artifact and import compatible JSON definitions back into the selected choice column.
+DV Choice Editor can export local or global choice definitions as JSON artifacts and import compatible definitions back into DV Choice Editor for reconstruction workflows.
 
-Imported definitions are compared against the currently loaded choice values. Missing values and label changes are staged locally, then reviewed through the normal preview-first workflow before publishing.
+#### Local Choice Artifact
 
 ```json
 {
   "artifactType": "dvce.choiceDefinition",
-  "version": "1.0",
+  "version": "2.0",
+  "scope": "local",
   "entityLogicalName": "account",
   "attributeLogicalName": "new_membershiptype",
   "values": [
-    { "label": "Gold", "value": 100000000 },
-    { "label": "Silver", "value": 100000001 }
+    {
+      "label": "Gold",
+      "value": 100000000
+    }
   ]
 }
 ```
+
+#### Global Choice Artifact
+
+```json
+{
+  "artifactType": "dvce.choiceDefinition",
+  "version": "2.0",
+  "scope": "global",
+  "optionSetName": "new_membershiptype",
+  "values": [
+    {
+      "label": "Gold",
+      "value": 100000000
+    }
+  ]
+}
+```
+
+Imported definitions are compared against the currently loaded target. Missing values and label changes are staged locally, then reviewed through the normal preview-first workflow before publishing.
 
 ### Preview-First Workflow
 
 All metadata changes are staged locally before being applied.
 
 ```text
-Select entity
-↓
-Select choice column
+Select local choice column
+or
+Select global choice
 ↓
 Stage changes
 ↓
@@ -88,11 +131,14 @@ Production-class environments display elevated publish warnings before metadata 
 * Remove individual staged changes
 * Clear all staged changes
 * Prevent deletion of the final remaining choice value
-* Boolean columns automatically excluded
+* Boolean choice editing safeguards
 * Choice values treated as immutable identities after creation
 * Inspect potential usage across forms, views, personal views, and processes
 * Import JSON definitions into local staged changes
 * Export selected choices as reusable JSON definitions
+* Read-only protection for non-customizable global choices
+* View/export support for read-only global choices
+* Global choice metadata validation
 
 ## Shared DV ForgeLab Environment Settings
 
@@ -138,19 +184,29 @@ Feedback is routed through the shared DV ForgeLab feedback experience and automa
 
 https://www.dvforgelab.com/feedback
 
+---
+
 ## Scope
 
-DV Choice Editor intentionally focuses on a single operational task:
+DV Choice Editor intentionally focuses on Dataverse choice management.
 
-**Managing Dataverse local choice values.**
+### Supported
 
-The extension does not currently provide:
+* Local entity choice columns
+* Global choices
+* JSON definition import/export
+* Preview-first metadata publishing
 
-* Global choice management
+### Not Included
+
 * CSV import/export
 * Solution management
+* Multi-language labels
 * Metadata administration beyond choice values
 * Bulk editing workflows
+* Cross-environment comparison
+* Timeline reconstruction
+* Drift analysis
 
 ---
 
@@ -166,7 +222,7 @@ DV Choice Editor brings a focused choice management workflow directly into VS Co
 
 DV Choice Editor is a focused Dataverse utility from DV ForgeLab.
 
-For operational investigation, execution, runtime analysis, and cross-environment comparison, see [DV Quick Run](https://www.dvquickrun.com).
+For operational investigation, execution, runtime analysis, and cross-environment comparison, see DV Quick Run.
 
 DV Choice Editor follows the same principles:
 
@@ -178,4 +234,4 @@ DV Choice Editor follows the same principles:
 
 ---
 
-Built by **[DV ForgeLab](https://www.dvforgelab.com)**.
+Built by **DV ForgeLab**.

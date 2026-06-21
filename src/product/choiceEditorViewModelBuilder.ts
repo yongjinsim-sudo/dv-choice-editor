@@ -22,11 +22,19 @@ function classifyEnvironment(label?: string, url?: string): { safety: 'None' | '
 export function buildChoiceEditorViewModel(state: ChoiceEditorState): ChoiceEditorViewModel {
 	const selectedEntity = state.entities.find(entity => entity.logicalName === state.selectedEntityLogicalName);
 	const selectedChoice = state.choiceColumns.find(choice => choice.logicalName === state.selectedChoiceLogicalName);
+	const selectedGlobalChoice = state.globalChoices.find(choice => choice.name === state.selectedGlobalChoiceName);
 	const environmentSafety = classifyEnvironment(state.environment?.label, state.environment?.url);
+	const selectedTargetLabel = state.choiceScope === 'global'
+		? selectedGlobalChoice?.displayName ?? selectedGlobalChoice?.name ?? 'None'
+		: selectedChoice?.displayName ?? selectedChoice?.logicalName ?? 'None';
+	const selectedTargetReadOnly = state.choiceScope === 'global' && selectedGlobalChoice?.isCustomizable === false;
+	const selectedTargetReadOnlyReason = selectedTargetReadOnly
+		? 'This global choice is not customizable in the connected environment. DVCE can view, import-compare, and export it, but cannot stage or apply reconstruction changes.'
+		: undefined;
 
 	return {
 		productName: 'DV Choice Editor',
-		subtitle: 'Dataverse choice management inside VS Code.',
+		subtitle: 'Dataverse local and global choice management inside VS Code.',
 		environment: state.environment
 			? {
 				label: state.environment.label,
@@ -41,15 +49,21 @@ export function buildChoiceEditorViewModel(state: ChoiceEditorState): ChoiceEdit
 				safety: 'None',
 				safetyLabel: 'No environment connected'
 			},
+		choiceScope: state.choiceScope,
 		entities: state.entities,
 		choiceColumns: state.choiceColumns,
+		globalChoices: state.globalChoices,
 		selectedEntity,
 		selectedChoice,
+		selectedGlobalChoice,
+		selectedTargetReadOnly,
+		selectedTargetReadOnlyReason,
 		summary: {
 			choiceColumnCount: state.choiceColumns.length,
+			globalChoiceCount: state.globalChoices.length,
 			valueCount: state.values.length,
 			pendingChangeCount: state.pendingChanges.length,
-			selectedEntityLabel: selectedEntity?.displayName ?? selectedEntity?.logicalName ?? 'None'
+			selectedTargetLabel
 		},
 		values: state.values,
 		usageGroups: state.usageGroups,
@@ -62,8 +76,10 @@ export function buildChoiceEditorViewModel(state: ChoiceEditorState): ChoiceEdit
 
 export function buildInitialChoiceEditorViewModel(): ChoiceEditorViewModel {
 	return buildChoiceEditorViewModel({
+		choiceScope: 'local',
 		entities: [],
 		choiceColumns: [],
+		globalChoices: [],
 		values: [],
 		usageGroups: [],
 		usageInspected: false,

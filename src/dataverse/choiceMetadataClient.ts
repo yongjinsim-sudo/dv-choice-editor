@@ -6,10 +6,21 @@ export type EntityChoiceColumn = {
 	type: 'Picklist' | 'State' | 'Status' | 'MultiSelectPicklist';
 };
 
+export type GlobalChoiceDefinition = {
+	name: string;
+	displayName?: string;
+	type?: string;
+	isCustomizable?: boolean;
+};
+
 export type ChoiceOptionValue = {
 	value: number;
 	label: string;
 	status?: 'System' | 'Managed' | 'Custom' | 'Unknown';
+};
+
+export type GlobalChoiceMetadataDetails = GlobalChoiceDefinition & {
+	values: ChoiceOptionValue[];
 };
 
 type ODataList<T> = {
@@ -24,6 +35,22 @@ type EntityMetadataRow = {
 			Label?: string;
 		};
 	};
+};
+
+type GlobalOptionSetMetadataRow = {
+	Name?: string;
+	DisplayName?: {
+		UserLocalizedLabel?: {
+			Label?: string;
+		};
+	};
+	OptionSetType?: string;
+	IsCustomizable?: {
+		Value?: boolean;
+	};
+	Options?: OptionMetadataRow[];
+	TrueOption?: OptionMetadataRow;
+	FalseOption?: OptionMetadataRow;
 };
 
 type AttributeMetadataRow = {
@@ -62,8 +89,26 @@ function getDisplayLabel(row: { DisplayName?: { UserLocalizedLabel?: { Label?: s
 	return row.DisplayName?.UserLocalizedLabel?.Label?.trim() || fallback;
 }
 
+function getManagedPropertyValue(value: { Value?: boolean } | undefined): boolean | undefined {
+	return typeof value?.Value === 'boolean' ? value.Value : undefined;
+}
+
 function getOptionLabel(row: OptionMetadataRow): string {
 	return row.Label?.UserLocalizedLabel?.Label?.trim() || '(no label)';
+}
+
+function distinctByName<T extends { name: string }>(items: T[]): T[] {
+	const seen = new Set<string>();
+	const result: T[] = [];
+	for (const item of items) {
+		const key = item.name.toLowerCase();
+		if (!seen.has(key)) {
+			seen.add(key);
+			result.push(item);
+		}
+	}
+
+	return result;
 }
 
 function distinctByLogicalName<T extends { logicalName: string }>(items: T[]): T[] {
@@ -161,6 +206,72 @@ export class ChoiceMetadataClient {
 		return entities.sort((a, b) =>
 			(a.displayName ?? a.logicalName).localeCompare(b.displayName ?? b.logicalName, undefined, { sensitivity: 'base' })
 		);
+	}
+
+
+	async listGlobalChoices(): Promise<GlobalChoiceDefinition[]> {
+		const response = await this.client.get<ODataList<GlobalOptionSetMetadataRow>>(
+			'/GlobalOptionSetDefinitions?$select=Name,DisplayName,OptionSetType,IsCustomizable&$top=5000'
+		);
+
+		return distinctByName(
+			(response.value ?? [])
+				.filter((row) => (row.OptionSetType ?? '').trim().toLowerCase() !== 'boolean')
+				.map((row): GlobalChoiceDefinition | undefined => {
+					const name = row.Name?.trim();
+					if (!name) {
+						return undefined;
+					}
+
+					return {
+						name,
+						displayName: getDisplayLabel(row, name),
+						type: row.OptionSetType,
+						isCustomizable: getManagedPropertyValue(row.IsCustomizable)
+					};
+				})
+				.filter((item): item is GlobalChoiceDefinition => !!item)
+		).sort((a, b) => (a.displayName ?? a.name).localeCompare(b.displayName ?? b.name, undefined, { sensitivity: 'base' }));
+	}
+
+	async getGlobalChoiceDetails(optionSetName: string): Promise<GlobalChoiceMetadataDetails> {
+		const safeName = encodeLogicalName(optionSetName);
+		const paths = [
+			// Options is a structural collection on OptionSetMetadata, not a navigation property.
+			// Dataverse rejects `$expand=Options`; retrieve it through the derived metadata type instead.
+			`/GlobalOptionSetDefinitions(Name='${safeName}')/Microsoft.Dynamics.CRM.OptionSetMetadata?$select=Name,DisplayName,OptionSetType,IsCustomizable,Options`,
+			`/GlobalOptionSetDefinitions(Name='${safeName}')?$select=Name,DisplayName,OptionSetType,IsCustomizable,Options`
+		];
+
+		let lastError: unknown;
+		for (const path of paths) {
+			try {
+				const row = await this.client.get<GlobalOptionSetMetadataRow>(path);
+				const name = row.Name?.trim() || optionSetName;
+				return {
+					name,
+					displayName: getDisplayLabel(row, name),
+					type: row.OptionSetType,
+					isCustomizable: getManagedPropertyValue(row.IsCustomizable),
+					values: mapOptions(row.Options)
+				};
+			} catch (error) {
+				lastError = error;
+			}
+		}
+
+		if (lastError instanceof Error) {
+			throw lastError;
+		}
+
+		return {
+			name: optionSetName,
+			values: []
+		};
+	}
+
+	async listGlobalChoiceValues(optionSetName: string): Promise<ChoiceOptionValue[]> {
+		return (await this.getGlobalChoiceDetails(optionSetName)).values;
 	}
 
 	async listChoiceColumns(entityLogicalName: string): Promise<EntityChoiceColumn[]> {

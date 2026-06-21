@@ -6,6 +6,8 @@ export type ChoiceEditorEnvironmentViewModel = {
 	safetyLabel: string;
 };
 
+export type ChoiceScope = 'local' | 'global';
+
 export type EntityViewModel = {
 	logicalName: string;
 	displayName?: string;
@@ -17,11 +19,19 @@ export type ChoiceColumnViewModel = {
 	type: 'Picklist' | 'State' | 'Status' | 'MultiSelectPicklist';
 };
 
+export type GlobalChoiceViewModel = {
+	name: string;
+	displayName?: string;
+	type?: string;
+	isCustomizable?: boolean;
+};
+
 export type ChoiceEditorSummaryViewModel = {
 	choiceColumnCount: number;
+	globalChoiceCount: number;
 	valueCount: number;
 	pendingChangeCount: number;
-	selectedEntityLabel: string;
+	selectedTargetLabel: string;
 };
 
 export type ChoiceValueViewModel = {
@@ -30,7 +40,6 @@ export type ChoiceValueViewModel = {
 	status: 'System' | 'Managed' | 'Custom' | 'Unknown';
 	pendingState: 'Unchanged' | 'Added' | 'Updated' | 'Deleted';
 };
-
 
 export type ChoiceUsageItemViewModel = {
 	name: string;
@@ -52,11 +61,16 @@ export type ChoiceEditorViewModel = {
 	productName: string;
 	subtitle: string;
 	environment: ChoiceEditorEnvironmentViewModel;
+	choiceScope: ChoiceScope;
 	entities: EntityViewModel[];
 	choiceColumns: ChoiceColumnViewModel[];
+	globalChoices: GlobalChoiceViewModel[];
 	summary: ChoiceEditorSummaryViewModel;
 	selectedEntity?: EntityViewModel;
 	selectedChoice?: ChoiceColumnViewModel;
+	selectedGlobalChoice?: GlobalChoiceViewModel;
+	selectedTargetReadOnly: boolean;
+	selectedTargetReadOnlyReason?: string;
 	values: ChoiceValueViewModel[];
 	usageGroups: ChoiceUsageGroupViewModel[];
 	usageInspected: boolean;

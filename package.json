@@ -1,8 +1,8 @@
 {
   "name": "dv-choice-editor",
   "displayName": "DV Choice Editor",
-  "description": "Preview-first Dataverse choice management with JSON definition import/export for VS Code.",
-  "version": "1.2.2",
+  "description": "Preview-first Dataverse local and global choice management with JSON definition import/export for VS Code.",
+  "version": "1.3.0",
   "engines": {
     "vscode": "^1.120.0"
   },
@@ -117,7 +117,11 @@
     "power apps",
     "crm",
     "model driven app",
-    "microsoft dataverse"
+    "microsoft dataverse",
+    "global choices",
+    "global option set",
+    "reconstruction artifacts",
+    "dvqr"
   ],
   "publisher": "dv-forgelab",
   "icon": "images/dv-utilities-icon-128.png",

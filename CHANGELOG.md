@@ -2,6 +2,21 @@
 
 All notable changes to the "DV Choice Editor" extension will be documented in this file.
 
+## [1.3.0] - Global Choice Support & DVQR Reconstruction Readiness
+
+- Added global choice discovery and value loading.
+- Added shared local/global `ChoiceTarget` architecture to avoid duplicated workflows.
+- Extended add, edit, delete, preview, apply, publish, JSON export, and JSON import to work against local choice columns and global choices.
+- Added DVCE choice definition artifact v2.0 with explicit `scope: "local" | "global"`.
+- Preserved backward compatibility for v1.0 local choice definition artifacts.
+- Refactored import/export parsing and staging into reusable product services for DVQR reconstruction readiness.
+- Local usage inspection remains intentionally scoped to entity choice columns.
+- Added read-only protection for non-customizable global choices.
+- Disabled Add, Edit, Delete, Apply, and Publish actions for read-only global choice targets.
+- Allowed read-only global choices to remain viewable/exportable for inspection and backup.
+- Improved global choice metadata handling by avoiding invalid `$expand=Options` usage.
+- Filtered unsupported Boolean global option set editing scenarios.
+
 ---
 
 ## [1.2.2] - Feedback button

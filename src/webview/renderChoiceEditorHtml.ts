@@ -1,4 +1,4 @@
-import { ChoiceColumnViewModel, ChoiceEditorViewModel, ChoiceUsageGroupViewModel, EntityViewModel } from '../product/choiceEditorTypes';
+import { ChoiceColumnViewModel, ChoiceEditorViewModel, ChoiceUsageGroupViewModel, EntityViewModel, GlobalChoiceViewModel } from '../product/choiceEditorTypes';
 import { escapeHtml } from '../shared/escaping';
 import { choiceEditorStyles } from './choiceEditorStyles';
 import { choiceEditorScript } from './choiceEditorScript';
@@ -42,6 +42,23 @@ function renderChoiceOptions(choices: ChoiceColumnViewModel[], selectedLogicalNa
 	].join('');
 }
 
+function renderGlobalChoiceOptions(choices: GlobalChoiceViewModel[], selectedName?: string): string {
+	if (!choices.length) {
+		return '<option value="">Connect to load global choices</option>';
+	}
+
+	return [
+		'<option value="">Select global choice</option>',
+		...choices.map(choice => {
+			const mutability = choice.isCustomizable === false ? ' • read-only' : '';
+			const label = choice.displayName && choice.displayName !== choice.name
+				? `${choice.displayName} (${choice.name})${choice.type ? ` • ${choice.type}` : ''}${mutability}`
+				: `${choice.name}${choice.type ? ` • ${choice.type}` : ''}${mutability}`;
+			const selected = choice.name === selectedName ? ' selected' : '';
+			return `<option value="${escapeHtml(choice.name)}"${selected}>${escapeHtml(label)}</option>`;
+		})
+	].join('');
+}
 
 function getEnvironmentPillClass(viewModel: ChoiceEditorViewModel): string {
 	if (viewModel.environment.safety === 'Red') {
@@ -164,12 +181,12 @@ export function renderChoiceEditorHtml(viewModel: ChoiceEditorViewModel, options
 				<td><span class="dv-pill ${value.status.toLowerCase()}">${escapeHtml(value.status)}</span></td>
 				<td><span class="dv-pill ${pendingClass}">${escapeHtml(value.pendingState)}</span></td>
 				<td>
-					<button data-command="editValue" data-value="${escapeHtml(value.value)}"${isDeleted ? ' disabled' : ''}>Edit</button>
-					<button data-command="deleteValue" data-value="${escapeHtml(value.value)}"${canDelete ? '' : ' disabled'}>Delete</button>
+					<button data-command="editValue" data-value="${escapeHtml(value.value)}"${isDeleted || viewModel.selectedTargetReadOnly ? ' disabled' : ''}>Edit</button>
+					<button data-command="deleteValue" data-value="${escapeHtml(value.value)}"${canDelete && !viewModel.selectedTargetReadOnly ? '' : ' disabled'}>Delete</button>
 				</td>
 			</tr>`;
 		}).join('')
-		: `<tr><td colspan="5"><div class="dv-empty">Connect to Dataverse, select an entity, then choose a choice column to load values.</div></td></tr>`;
+		: `<tr><td colspan="5"><div class="dv-empty">Connect to Dataverse, then select a local choice column or global choice to load values.</div></td></tr>`;
 
 	const pendingText = viewModel.pendingChanges.length
 		? `${viewModel.pendingChanges.length} pending change(s)`
@@ -179,7 +196,8 @@ export function renderChoiceEditorHtml(viewModel: ChoiceEditorViewModel, options
 		? `<div class="dv-pending-list">${viewModel.pendingChanges.map(renderPendingChangeLine).join('')}</div>`
 		: '';
 
-	const hasSelectedChoice = !!viewModel.selectedChoice;
+	const hasSelectedChoice = viewModel.choiceScope === 'global' ? !!viewModel.selectedGlobalChoice : !!viewModel.selectedChoice;
+	const canStageChanges = hasSelectedChoice && !viewModel.selectedTargetReadOnly;
 	const hasPendingChanges = viewModel.pendingChanges.length > 0;
 	const environmentPillClass = getEnvironmentPillClass(viewModel);
 	const applyButtonClass = getApplyButtonClass(viewModel);
@@ -197,9 +215,9 @@ export function renderChoiceEditorHtml(viewModel: ChoiceEditorViewModel, options
 			</div>
 			<div class="dv-preview-grid">
 				<div><span>Environment</span><strong>${escapeHtml(viewModel.environment.label)}</strong><em>${escapeHtml(viewModel.environment.safetyLabel)}</em></div>
-				<div><span>Entity</span><strong>${escapeHtml(viewModel.selectedEntity?.displayName ?? viewModel.selectedEntity?.logicalName ?? 'None')} (${escapeHtml(viewModel.selectedEntity?.logicalName ?? '—')})</strong></div>
-				<div><span>Choice</span><strong>${escapeHtml(viewModel.selectedChoice?.displayName ?? viewModel.selectedChoice?.logicalName ?? 'None')} (${escapeHtml(viewModel.selectedChoice?.logicalName ?? '—')})</strong></div>
-				<div><span>Publish target</span><strong>${escapeHtml(viewModel.selectedEntity?.logicalName ?? '—')}</strong></div>
+				<div><span>Scope</span><strong>${escapeHtml(viewModel.choiceScope)}</strong></div>
+				<div><span>Choice target</span><strong>${escapeHtml(viewModel.choiceScope === 'global' ? (viewModel.selectedGlobalChoice?.displayName ?? viewModel.selectedGlobalChoice?.name ?? 'None') : (viewModel.selectedChoice?.displayName ?? viewModel.selectedChoice?.logicalName ?? 'None'))}</strong></div>
+				<div><span>Publish target</span><strong>${escapeHtml(viewModel.choiceScope === 'global' ? (viewModel.selectedGlobalChoice?.name ?? '—') : (viewModel.selectedEntity?.logicalName ?? '—'))}</strong></div>
 			</div>
 			<h3>Pending operations</h3>
 			<div class="dv-preview-operations">${viewModel.pendingChanges.map(renderPreviewOperation).join('')}</div>
@@ -212,7 +230,7 @@ export function renderChoiceEditorHtml(viewModel: ChoiceEditorViewModel, options
 		: '';
 
 
-	const usageHtml = hasSelectedChoice
+	const usageHtml = hasSelectedChoice && viewModel.choiceScope === 'local'
 		? `<section class="dv-card dv-section">
 			<div class="dv-section-header">
 				<div>
@@ -229,9 +247,13 @@ export function renderChoiceEditorHtml(viewModel: ChoiceEditorViewModel, options
 	const messageHtml = viewModel.message
 		? `<div class="dv-message ${escapeHtml(viewModel.message.kind)}">${escapeHtml(viewModel.message.text)}</div>`
 		: '';
+	const readOnlyHtml = viewModel.selectedTargetReadOnly && viewModel.selectedTargetReadOnlyReason
+		? `<div class="dv-message Warning">${escapeHtml(viewModel.selectedTargetReadOnlyReason)}</div>`
+		: '';
 
-	const entityDisabled = viewModel.entities.length ? '' : ' disabled';
-	const choiceDisabled = viewModel.choiceColumns.length ? '' : ' disabled';
+	const entityDisabled = viewModel.entities.length && viewModel.choiceScope === 'local' ? '' : ' disabled';
+	const choiceDisabled = viewModel.choiceColumns.length && viewModel.choiceScope === 'local' ? '' : ' disabled';
+	const globalChoiceDisabled = viewModel.globalChoices.length && viewModel.choiceScope === 'global' ? '' : ' disabled';
 
 	return `<!DOCTYPE html>
 <html lang="en">
@@ -259,7 +281,7 @@ export function renderChoiceEditorHtml(viewModel: ChoiceEditorViewModel, options
 			<div class="dv-pill-row">
 				<span class="dv-pill ${environmentPillClass}">${escapeHtml(viewModel.environment.label)}</span>
 				<span class="dv-pill">Preview-first metadata updates</span>
-				<span class="dv-pill">Entity-scoped choices only</span>
+				<span class="dv-pill">Local + global choices</span>
 			</div>
 			<div class="dv-actions">
 				<button data-command="connect">Connect</button>
@@ -270,10 +292,11 @@ export function renderChoiceEditorHtml(viewModel: ChoiceEditorViewModel, options
 		</section>
 
 		${messageHtml}
+		${readOnlyHtml}
 
 		<section class="dv-summary-grid" aria-label="Summary">
 			<div class="dv-card highlight">
-				<div class="dv-card-title">Choice columns</div>
+				<div class="dv-card-title">Local columns</div>
 				<div class="dv-card-value">${escapeHtml(viewModel.summary.choiceColumnCount)}</div>
 				<div class="dv-card-caption">For selected entity</div>
 			</div>
@@ -288,16 +311,23 @@ export function renderChoiceEditorHtml(viewModel: ChoiceEditorViewModel, options
 				<div class="dv-card-caption">Staged locally before apply</div>
 			</div>
 			<div class="dv-card">
-				<div class="dv-card-title">Entity</div>
-				<div class="dv-card-value">${escapeHtml(viewModel.summary.selectedEntityLabel)}</div>
-				<div class="dv-card-caption">Current target</div>
+				<div class="dv-card-title">Target</div>
+				<div class="dv-card-value">${escapeHtml(viewModel.summary.selectedTargetLabel)}</div>
+				<div class="dv-card-caption">Current choice target</div>
 			</div>
 		</section>
 
 		<section class="dv-card dv-section">
 			<h2>Choice target</h2>
-			<p>Select an entity, then select one local choice / option set column to manage.</p>
+			<p>Select a local entity choice column or a global choice definition. Both paths reuse the same staging, preview, apply, publish, import, and export workflow.</p>
 			<div class="dv-form-grid">
+				<div class="dv-field">
+					<label for="choiceScope">Scope</label>
+					<select id="choiceScope">
+						<option value="local"${viewModel.choiceScope === 'local' ? ' selected' : ''}>Local choice column</option>
+						<option value="global"${viewModel.choiceScope === 'global' ? ' selected' : ''}>Global choice</option>
+					</select>
+				</div>
 				<div class="dv-field">
 					<label for="entity">Entity</label>
 					<select id="entity"${entityDisabled}>${renderEntityOptions(viewModel.entities, viewModel.selectedEntity?.logicalName)}</select>
@@ -305,6 +335,10 @@ export function renderChoiceEditorHtml(viewModel: ChoiceEditorViewModel, options
 				<div class="dv-field">
 					<label for="choice">Choice column</label>
 					<select id="choice"${choiceDisabled}>${renderChoiceOptions(viewModel.choiceColumns, viewModel.selectedChoice?.logicalName)}</select>
+				</div>
+				<div class="dv-field">
+					<label for="globalChoice">Global choice</label>
+					<select id="globalChoice"${globalChoiceDisabled}>${renderGlobalChoiceOptions(viewModel.globalChoices, viewModel.selectedGlobalChoice?.name)}</select>
 				</div>
 			</div>
 		</section>
@@ -335,10 +369,10 @@ export function renderChoiceEditorHtml(viewModel: ChoiceEditorViewModel, options
 			<p>${escapeHtml(pendingText)}</p>
 			${pendingRows}
 			<div class="dv-actions">
-				<button data-command="addValue"${hasSelectedChoice ? '' : ' disabled'}>Add value</button>
+				<button data-command="addValue"${canStageChanges ? '' : ' disabled'}>Add value</button>
 				<button data-command="importJson"${hasSelectedChoice ? '' : ' disabled'}>Import JSON</button>
 				<button data-command="exportJson"${hasSelectedChoice && viewModel.values.length ? '' : ' disabled'}>Export JSON</button>
-				<button data-command="previewChanges"${hasPendingChanges ? '' : ' disabled'}>Preview changes</button>
+				<button data-command="previewChanges"${hasPendingChanges && !viewModel.selectedTargetReadOnly ? '' : ' disabled'}>Preview changes</button>
 				<button data-command="clearPendingChanges"${hasPendingChanges ? '' : ' disabled'}>Clear staged changes</button>
 			</div>
 		</section>

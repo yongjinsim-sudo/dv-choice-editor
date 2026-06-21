@@ -19,6 +19,13 @@ export const choiceEditorScript = `
 		});
 	});
 
+	const scopeSelect = document.getElementById('choiceScope');
+	if (scopeSelect) {
+		scopeSelect.addEventListener('change', () => {
+			post('setChoiceScope', { scope: scopeSelect.value });
+		});
+	}
+
 	const entitySelect = document.getElementById('entity');
 	if (entitySelect) {
 		entitySelect.addEventListener('change', () => {
@@ -30,6 +37,13 @@ export const choiceEditorScript = `
 	if (choiceSelect) {
 		choiceSelect.addEventListener('change', () => {
 			post('selectChoice', { logicalName: choiceSelect.value });
+		});
+	}
+
+	const globalChoiceSelect = document.getElementById('globalChoice');
+	if (globalChoiceSelect) {
+		globalChoiceSelect.addEventListener('change', () => {
+			post('selectGlobalChoice', { name: globalChoiceSelect.value });
 		});
 	}
 })();
