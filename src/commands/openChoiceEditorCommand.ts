@@ -10,7 +10,7 @@ import { buildChoiceDefinitionArtifact, normalizeChoiceDefinitionArtifact } from
 import { getChoiceTargetLabel, isSameChoiceTarget } from '../product/choiceTargetTypes';
 import { buildChoiceEditorViewModel } from '../product/choiceEditorViewModelBuilder';
 import { ChoiceValueViewModel, PendingChoiceChangeViewModel } from '../product/choiceEditorTypes';
-import { getNextOptionValue, stageImportedValues } from '../product/choiceStagingService';
+import { getNextOptionValue, stageImportedOperations, stageImportedValues } from '../product/choiceStagingService';
 import { renderChoiceEditorHtml } from '../webview/renderChoiceEditorHtml';
 
 const panelTitle = 'DV Choice Editor';
@@ -20,6 +20,12 @@ type WebviewMessage = {
 	command?: string;
 	payload?: Record<string, unknown>;
 };
+
+
+function formatArtifactTimestamp(date: Date): string {
+	const pad = (value: number) => String(value).padStart(2, '0');
+	return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+}
 
 function safeFileSegment(value: string | undefined, fallback: string): string {
 	const candidate = (value || fallback).trim() || fallback;
@@ -619,6 +625,67 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 		}
 	}
 
+
+	function getDvceWorkspaceExportsFolder(): string | undefined {
+		const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+		if (!workspaceFolder) {
+			return undefined;
+		}
+		return path.join(workspaceFolder.uri.fsPath, '.dvforgelab', 'dvce', 'exports');
+	}
+
+	async function pickDvceImportFile(): Promise<vscode.Uri | undefined> {
+		const workspaceExportsFolder = getDvceWorkspaceExportsFolder();
+		if (workspaceExportsFolder) {
+			try {
+				const entries = await fs.readdir(workspaceExportsFolder, { withFileTypes: true });
+				const candidates = entries
+					.filter(entry => entry.isFile() && (entry.name.toLowerCase().endsWith('.json') || entry.name.toLowerCase().endsWith('.dvce.json')))
+					.map(entry => path.join(workspaceExportsFolder, entry.name));
+				if (candidates.length) {
+					const picked = await vscode.window.showQuickPick(
+						candidates.map(filePath => ({ label: path.basename(filePath), description: filePath, filePath })),
+						{ placeHolder: 'Select a DVCE artifact from .dvforgelab/dvce/exports' }
+					);
+					if (picked) {
+						return vscode.Uri.file(picked.filePath);
+					}
+					return undefined;
+				}
+			} catch {
+				// Fall back to the standard file picker when the workspace folder does not exist yet.
+			}
+		}
+
+		const selected = await vscode.window.showOpenDialog({
+			canSelectFiles: true,
+			canSelectFolders: false,
+			canSelectMany: false,
+			filters: {
+				'DV Choice Editor JSON': ['json'],
+				'DVQR-generated DVCE artifact': ['dvce.json']
+			},
+			openLabel: 'Import DVCE JSON'
+		});
+		return selected?.[0];
+	}
+
+	async function pickDvceExportFile(defaultName: string): Promise<vscode.Uri | undefined> {
+		const workspaceExportsFolder = getDvceWorkspaceExportsFolder();
+		if (workspaceExportsFolder) {
+			await fs.mkdir(workspaceExportsFolder, { recursive: true });
+			return vscode.Uri.file(path.join(workspaceExportsFolder, defaultName));
+		}
+
+		return vscode.window.showSaveDialog({
+			defaultUri: vscode.Uri.file(defaultName),
+			filters: {
+				'DV Choice Editor JSON': ['json']
+			},
+			saveLabel: 'Export DVCE JSON'
+		});
+	}
+
 	async function exportJson(): Promise<void> {
 		const target = getSelectedChoiceTarget(state);
 		if (!target || !state.values.length) {
@@ -631,24 +698,18 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 			? state.globalChoices.find(choice => choice.name === target.optionSetName)?.displayName ?? target.optionSetName
 			: state.choiceColumns.find(choice => choice.logicalName === target.attributeLogicalName)?.displayName ?? target.attributeLogicalName;
 		const artifact = buildChoiceDefinitionArtifact(target, state.values, displayName);
+		const timestamp = formatArtifactTimestamp(new Date());
 		const defaultName = target.scope === 'global'
-			? `global-${safeFileSegment(target.optionSetName, 'choice')}.dvce.json`
-			: `${safeFileSegment(target.entityLogicalName, 'entity')}-${safeFileSegment(target.attributeLogicalName, 'choice')}.dvce.json`;
-		const targetUri = await vscode.window.showSaveDialog({
-			defaultUri: vscode.Uri.file(defaultName),
-			filters: {
-				'DV Choice Editor definition': ['dvce.json', 'json'],
-				JSON: ['json']
-			},
-			saveLabel: 'Export DVCE JSON'
-		});
+			? `dvce-${safeFileSegment(target.optionSetName, 'choice')}-${timestamp}.json`
+			: `dvce-${safeFileSegment(target.entityLogicalName, 'entity')}-${safeFileSegment(target.attributeLogicalName, 'choice')}-${timestamp}.json`;
+		const targetUri = await pickDvceExportFile(defaultName);
 
 		if (!targetUri) {
 			return;
 		}
 
 		await fs.writeFile(targetUri.fsPath, `${JSON.stringify(artifact, null, 2)}\n`, 'utf8');
-		state.message = { kind: 'Info', text: `Exported ${artifact.values?.length ?? 0} choice value(s) to ${path.basename(targetUri.fsPath)}.` };
+		state.message = { kind: 'Info', text: `Exported DVCE JSON\n\n${path.basename(targetUri.fsPath)}\n\nSaved to:\n${path.dirname(targetUri.fsPath)}` };
 		render();
 	}
 
@@ -694,23 +755,14 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 			return;
 		}
 
-		const selected = await vscode.window.showOpenDialog({
-			canSelectFiles: true,
-			canSelectFolders: false,
-			canSelectMany: false,
-			filters: {
-				'DV Choice Editor definition': ['dvce.json', 'json'],
-				JSON: ['json']
-			},
-			openLabel: 'Import DVCE JSON'
-		});
+		const selected = await pickDvceImportFile();
 
-		if (!selected?.length) {
+		if (!selected) {
 			return;
 		}
 
 		try {
-			const raw = await fs.readFile(selected[0].fsPath, 'utf8');
+			const raw = await fs.readFile(selected.fsPath, 'utf8');
 			const parsed = normalizeChoiceDefinitionArtifact(JSON.parse(raw));
 			await ensureImportedTargetSelected(parsed.target);
 
@@ -719,17 +771,20 @@ export async function openChoiceEditorCommand(context: vscode.ExtensionContext):
 				state.previewOpen = false;
 				state.message = {
 					kind: 'Warning',
-					text: `Imported ${path.basename(selected[0].fsPath)} for comparison only. Global choice ${state.selectedGlobalChoiceName ?? 'selected target'} is read-only/non-customizable, so no reconstruction changes were staged.`
+					text: `Imported ${path.basename(selected.fsPath)} for comparison only. Global choice ${state.selectedGlobalChoiceName ?? 'selected target'} is read-only/non-customizable, so no reconstruction changes were staged.`
 				};
 				render();
 				return;
 			}
 
-			const summary = stageImportedValues(state, parsed.values);
+			const summary = parsed.operations.length
+				? stageImportedOperations(state, parsed.operations)
+				: stageImportedValues(state, parsed.values);
 			state.previewOpen = false;
+			const generatedByText = parsed.generatedBy ? ` Generated by: ${parsed.generatedBy}.` : '';
 			state.message = {
-				kind: 'Info',
-				text: `Imported ${path.basename(selected[0].fsPath)}. Added: ${summary.added}. Updated: ${summary.updated}. Skipped: ${summary.skipped}.`
+				kind: summary.deleted > 0 ? 'Warning' : 'Info',
+				text: `Imported ${path.basename(selected.fsPath)}.${generatedByText} Added: ${summary.added}. Updated: ${summary.updated}. Deleted: ${summary.deleted}. Skipped: ${summary.skipped}. Preview before applying.`
 			};
 			render();
 		} catch (error) {

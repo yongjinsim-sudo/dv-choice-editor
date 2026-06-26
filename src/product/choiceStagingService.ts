@@ -1,5 +1,5 @@
 import { ChoiceValueViewModel, PendingChoiceChangeViewModel } from './choiceEditorTypes';
-import { NormalizedChoiceDefinitionArtifactValue } from './choiceDefinitionArtifact';
+import { NormalizedChoiceDefinitionArtifactOperation, NormalizedChoiceDefinitionArtifactValue } from './choiceDefinitionArtifact';
 
 export type ChoiceStageState = {
 	values: ChoiceValueViewModel[];
@@ -8,7 +8,8 @@ export type ChoiceStageState = {
 
 export type ImportStageSummary = {
 	added: number;
-	updated: number;
+	updated: number;	
+	deleted: number;
 	skipped: number;
 };
 
@@ -22,7 +23,7 @@ export function getNextOptionValue(values: ChoiceValueViewModel[], pendingChange
 }
 
 export function stageImportedValues(state: ChoiceStageState, importedValues: NormalizedChoiceDefinitionArtifactValue[]): ImportStageSummary {
-	const summary: ImportStageSummary = { added: 0, updated: 0, skipped: 0 };
+	const summary: ImportStageSummary = { added: 0, updated: 0, deleted: 0, skipped: 0 };
 
 	for (const imported of importedValues) {
 		const result = stageImportedValue(state, imported);
@@ -31,6 +32,47 @@ export function stageImportedValues(state: ChoiceStageState, importedValues: Nor
 
 	state.values = state.values.sort((a, b) => a.value - b.value);
 	return summary;
+}
+
+
+export function stageImportedOperations(state: ChoiceStageState, operations: NormalizedChoiceDefinitionArtifactOperation[]): ImportStageSummary {
+	const summary: ImportStageSummary = { added: 0, updated: 0, deleted: 0, skipped: 0 };
+
+	for (const operation of operations) {
+		const result = stageImportedOperation(state, operation);
+		summary[result] += 1;
+	}
+
+	state.values = state.values.sort((a, b) => a.value - b.value);
+	return summary;
+}
+
+function stageImportedOperation(state: ChoiceStageState, operation: NormalizedChoiceDefinitionArtifactOperation): keyof ImportStageSummary {
+	if (operation.kind === 'AddOption') {
+		return stageImportedValue(state, { label: operation.label, value: operation.value });
+	}
+
+	if (operation.kind === 'UpdateLabel') {
+		return stageImportedValue(state, { label: operation.nextLabel, value: operation.value });
+	}
+
+	const existing = state.values.find(value => value.value === operation.value && value.pendingState !== 'Deleted');
+	if (!existing) {
+		return 'skipped';
+	}
+
+	if (existing.pendingState === 'Added') {
+		state.pendingChanges = state.pendingChanges.filter(change => !(change.kind === 'Add' && change.value === operation.value));
+		state.values = state.values.filter(value => value.value !== operation.value);
+		return 'deleted';
+	}
+
+	state.pendingChanges = state.pendingChanges.filter(change => !(change.kind === 'UpdateLabel' && change.value === operation.value));
+	if (!state.pendingChanges.some(change => change.kind === 'Delete' && change.value === operation.value)) {
+		state.pendingChanges.push({ kind: 'Delete', value: operation.value, label: existing.label });
+	}
+	existing.pendingState = 'Deleted';
+	return 'deleted';
 }
 
 function stageImportedValue(state: ChoiceStageState, imported: NormalizedChoiceDefinitionArtifactValue): keyof ImportStageSummary {

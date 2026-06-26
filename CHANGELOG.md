@@ -1,3 +1,29 @@
+# Changelog
+
+## 1.4.0
+
+### Added
+
+* Added native **DVCE Choice Definition Artifact v3.0** support using `artifactType: "dvce.choiceDefinition"`.
+* Added operation-based import staging for `AddOption`, `UpdateLabel`, and `DeleteOption`.
+* Added workspace-first import/export support under `.dvforgelab/dvce/exports` when a VS Code workspace is available.
+* Added support for importing both standard `.json` exports and DVQR-generated `.dvce.json` reconstruction artifacts.
+
+### Changed
+
+* DVCE manual exports now use plain `.json` files.
+* DVQR reconstruction artifacts use the `.dvce.json` extension while preserving the same DVCE-owned schema.
+* Exported artifacts now include `generatedBy`, `generatedUtc`, and an `operations` array for forward-compatible reconstruction workflows.
+* Export filenames now follow the standard convention:
+
+  * Local: `dvce-{entity}-{attribute}-{yyyyMMdd-HHmmss}.json`
+  * Global: `dvce-{globalChoiceName}-{yyyyMMdd-HHmmss}.json`
+
+### Preserved
+
+* Existing v1.x/v2.x `dvce.choiceDefinition` value-array imports remain fully supported.
+* Preview-first staging remains mandatory before any Dataverse metadata mutation.
+
 # Change Log
 
 All notable changes to the "DV Choice Editor" extension will be documented in this file.
@@ -39,7 +65,7 @@ All notable changes to the "DV Choice Editor" extension will be documented in th
 
 - JSON export for the selected Dataverse choice definition.
 - JSON import for DV Choice Editor definition artifacts.
-- `.dvce.json` definition artifact shape for future DV ForgeLab ecosystem workflows.
+- DVCE JSON definition artifact shape for future DV ForgeLab ecosystem workflows.
 - Import comparison against the selected choice column to stage missing values and label updates.
 - Import summary showing added, updated, and skipped choice values.
 
